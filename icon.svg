@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#0E2636"/>
+  <circle cx="256" cy="226" r="124" fill="#C99A4A"/>
+  <circle cx="256" cy="226" r="82" fill="#F6E2B9"/>
+  <path d="M256 164l13 39 41-5-30 28 16 38-40-17-40 17 16-38-30-28 41 5z" fill="#0E2636"/>
+  <path d="M132 382c31-44 72-66 124-66s93 22 124 66" fill="none" stroke="#F6E2B9" stroke-width="24" stroke-linecap="round"/>
+  <text x="256" y="443" text-anchor="middle" fill="#F6E2B9" font-family="Georgia,serif" font-size="40" font-weight="700">SOONRÉ</text>
+</svg>
