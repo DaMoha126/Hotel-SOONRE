@@ -581,6 +581,44 @@ textarea.form-control{min-height:80px;resize:vertical}
 .stat-row:last-child{border-bottom:none}
 .stat-row .label{color:var(--muted)}
 .stat-row .value{font-weight:600;color:var(--brown-dark)}
+
+/* ================= SIGNATURE SOONRÉ ================= */
+/* Une touche contemporaine inspirée des tons de terre et de lumière du Sahel. */
+.login-screen{
+  position:relative;overflow:hidden;
+  background:
+    radial-gradient(circle at 14% 12%, rgba(229,191,118,.52) 0 4%, transparent 22%),
+    radial-gradient(circle at 87% 78%, rgba(35,113,95,.25) 0 8%, transparent 29%),
+    linear-gradient(140deg,#fffdf8 0%,#f2e9d9 52%,#e4eee9 100%);
+}
+.login-screen::before,.login-screen::after{
+  content:"";position:absolute;border-radius:999px;pointer-events:none;
+}
+.login-screen::before{width:360px;height:360px;top:-230px;right:-105px;border:1px solid rgba(28,75,90,.13);box-shadow:0 0 0 28px rgba(28,75,90,.045),0 0 0 58px rgba(28,75,90,.03)}
+.login-screen::after{width:230px;height:230px;bottom:-145px;left:-70px;background:rgba(201,154,74,.12)}
+.login-card{position:relative;z-index:1;border:1px solid rgba(255,255,255,.82);box-shadow:0 24px 70px rgba(14,38,54,.16),0 2px 0 rgba(201,154,74,.28);backdrop-filter:blur(10px)}
+.login-logo .sun{position:relative;isolation:isolate;animation:soonreGlow 4s ease-in-out infinite}
+.login-logo .sun::after{content:"";position:absolute;inset:-10px;border:1px dashed rgba(201,154,74,.55);border-radius:50%;z-index:-1}
+.login-logo .tagline{display:inline-block;padding:5px 10px;border-radius:99px;background:rgba(35,113,95,.09);color:var(--green);font-weight:700;letter-spacing:1.1px}
+.login-info{border:1px solid rgba(201,154,74,.22);background:linear-gradient(90deg,rgba(246,226,185,.45),rgba(255,255,255,.7))}
+@keyframes soonreGlow{0%,100%{transform:translateY(0);box-shadow:0 0 42px rgba(201,154,74,.36)}50%{transform:translateY(-3px);box-shadow:0 10px 52px rgba(201,154,74,.5)}}
+
+.sidebar{background:linear-gradient(165deg,#0a2230 0%,#123c4b 57%,#1c4b5a 100%)}
+.sidebar::before{content:"";height:4px;position:absolute;inset:0 0 auto;background:linear-gradient(90deg,#e5bf76,#c99a4a,#338b77)}
+.sidebar-header{padding-top:24px}
+.nav-section{color:#f6e2b9;letter-spacing:1.35px}
+.nav-item{border:1px solid transparent}
+.nav-item:hover{background:rgba(255,255,255,.10);transform:translateX(2px)}
+.nav-item.active{background:linear-gradient(90deg,rgba(229,191,118,.24),rgba(255,255,255,.10));border-color:rgba(229,191,118,.17);box-shadow:inset 3px 0 0 var(--gold-light)}
+.topbar{background:rgba(255,255,255,.86);backdrop-filter:blur(12px);border-bottom:1px solid rgba(28,75,90,.09)}
+.content{background:linear-gradient(135deg,#f8f6f0 0%,#f5f7f3 100%)}
+.kpi,.card,.panel{border-color:rgba(28,75,90,.10);box-shadow:0 7px 20px rgba(14,38,54,.055)}
+.kpi{overflow:hidden;position:relative}
+.kpi::after{content:"";position:absolute;width:92px;height:92px;border-radius:50%;right:-42px;bottom:-58px;background:rgba(201,154,74,.10)}
+.kpi:hover{transform:translateY(-3px);box-shadow:0 14px 28px rgba(14,38,54,.11)}
+.btn-primary{background:linear-gradient(135deg,var(--brown-light),var(--brown-dark));box-shadow:0 6px 14px rgba(14,38,54,.15)}
+.btn-primary:hover{background:linear-gradient(135deg,var(--green-light),var(--brown));}
+@media (prefers-reduced-motion:reduce){.login-logo .sun{animation:none}.nav-item:hover,.kpi:hover{transform:none}}
 </style>
 </head>
 <body>
