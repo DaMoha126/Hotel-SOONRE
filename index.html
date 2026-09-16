@@ -967,6 +967,7 @@ textarea.form-control{min-height:80px;resize:vertical}
               <option value="">Tous types</option>
               <option value="Ventilée">Ventilée</option>
               <option value="Climatisée">Climatisée</option>
+              <option value="VIP Ventilée">VIP Ventilée</option>
               <option value="VIP Climatisée">VIP Climatisée</option>
               <option value="Bungalow Ventilé">Bungalow Ventilé</option>
             </select>
@@ -2517,6 +2518,28 @@ let db = {
   currentUser:null
 };
 
+// Tarification officielle des chambres (montants par nuit, en FCFA).
+const ROOM_TARIFF_VERSION = 2;
+const ROOM_TARIFFS = {
+  'Ventilée': 6000,
+  'Climatisée': 12500,
+  'VIP Ventilée': 8000,
+  'VIP Climatisée': 15000,
+  'Bungalow Ventilé': 8000
+};
+function applyOfficialRoomTariffs(){
+  let changed = false;
+  (db.chambres || []).forEach(chambre => {
+    const tarif = ROOM_TARIFFS[chambre.type];
+    if(tarif && chambre.prix !== tarif){
+      chambre.prix = tarif;
+      changed = true;
+    }
+  });
+  db.tarificationVersion = ROOM_TARIFF_VERSION;
+  return changed;
+}
+
 function loadDB(){
   // Migration : supprimer ancienne base v1 si présente
   if(localStorage.getItem('raabo_amzara_v1')){
@@ -2541,6 +2564,7 @@ function loadDB(){
       ['magasins','locationsMagasin','pointages','permanences','paies','stock','mouvementsStock','sessionsCaisse','ecritures','planComptable','exercices','auditLog','tablesResto','reservationsResto','formules','categoriesMenu','proformas','devis'].forEach(k=>{
         if(!db[k]) db[k] = [];
       });
+      if(db.tarificationVersion !== ROOM_TARIFF_VERSION) applyOfficialRoomTariffs();
       saveDB();
     }catch(e){console.error('DB load error',e)}
   } else {
@@ -2568,11 +2592,9 @@ function seedData(){
     {code:'AES',   bloc:'Bloc 03 — AES / VIP CEDEAO',count:15,prefix:'V', types:['VIP Climatisée'],         eauChaude:true},
     {code:'BUNG',  bloc:'Bloc 04 — Bungalows',      count:4,  prefix:'B', types:['Bungalow Ventilé'],       eauChaude:false}
   ];
-  // Tarifs TDR : ordinaire ventilée 5000, climatisée 10000 ; VIP ventilée 6000, climatisée 12500
+  // Tarifs officiels : ventilation, climatisation, VIP et bungalows.
   function prixDe(bloc, type){
-    if(bloc==='AES') return type==='VIP Climatisée'?12500:6000;
-    if(bloc==='BUNG') return 5000;
-    return type==='Climatisée'?10000:5000;
+    return ROOM_TARIFFS[type] || 0;
   }
   blocs.forEach(b=>{
     for(let i=1;i<=b.count;i++){
@@ -2596,6 +2618,7 @@ function seedData(){
       });
     }
   });
+  db.tarificationVersion = ROOM_TARIFF_VERSION;
 
   // ===== MAGASINS (7 locaux à louer selon TDR) =====
   const magNoms = ['Magasin M01','Magasin M02','Magasin M03','Boutique B01','Boutique B02','Local L01','Local L02'];
@@ -3427,7 +3450,7 @@ function openRoomModal(id){
         <div class="form-group"><label>Numéro *</label><input type="text" class="form-control" id="chNum" required value="${r?r.numero:''}"></div>
         <div class="form-group"><label>Type *</label>
           <select class="form-control" id="chType" required>
-            ${['Ventilée','Climatisée','VIP Climatisée','Bungalow Ventilé'].map(t=>`<option ${r&&r.type===t?'selected':''}>${t}</option>`).join('')}
+            ${['Ventilée','Climatisée','VIP Ventilée','VIP Climatisée','Bungalow Ventilé'].map(t=>`<option ${r&&r.type===t?'selected':''}>${t}</option>`).join('')}
           </select>
         </div>
         <div class="form-group"><label>Bloc</label>

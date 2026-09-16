@@ -1,4 +1,4 @@
-const CACHE = 'hotel-soonre-v2';
+const CACHE = 'hotel-soonre-v3';
 const APP_SHELL = [
   './',
   './index.html',
