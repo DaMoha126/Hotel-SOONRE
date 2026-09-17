@@ -32,13 +32,3 @@ document.querySelector('#bookingForm').addEventListener('submit', event => {
 });
 const date = new Intl.DateTimeFormat('fr-FR',{weekday:'long',day:'numeric',month:'long'}).format(new Date());
 document.querySelector('#today').textContent = date.toUpperCase(); render();
-
-// Remove the version and copyright labels from the sidebar footer.
-document.querySelectorAll('.sidebar-footer').forEach(footer => {
-  footer.querySelectorAll('div').forEach(item => {
-    const text = item.textContent.trim();
-    if (text === 'v2.0.0 — TDR édition' || text === '© 2026 Hadotech') {
-      item.remove();
-    }
-  });
-});
