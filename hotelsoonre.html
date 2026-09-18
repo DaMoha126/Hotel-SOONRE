@@ -12,6 +12,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root{
   --brown:#1D4ED8;
@@ -2459,6 +2460,105 @@ textarea.form-control{min-height:80px;resize:vertical}
    Hadotech © 2026
 ===================================================== */
 
+// ============ SUPABASE ============
+const SUPABASE_URL = 'COLLE_ICI_TON_PROJECT_URL';
+const SUPABASE_ANON_KEY = 'COLLE_ICI_TA_CLE_ANON';
+const sb = (SUPABASE_URL.startsWith('http') && window.supabase)
+  ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  : null;
+
+function loginToEmail(login){ return login + '@hotelsoonre.local'; }
+
+// -- Conversion JS (camelCase, dans db.*) <-> lignes Supabase (snake_case) --
+function chambreToDb(c){
+  return { id:c.id, hotel_id:db.hotelId, numero:c.numero, type:c.type, bloc:c.bloc||null,
+    etage:c.etage||1, capacite:c.capacite||1, prix:c.prix||0, statut:c.statut,
+    climatisee:!!c.climatisee, eau_chaude:!!c.eauChaude, equipements:c.equipements||null };
+}
+function chambreFromDb(r){
+  return { id:r.id, numero:r.numero, type:r.type, bloc:r.bloc, etage:r.etage, capacite:r.capacite,
+    prix:Number(r.prix), statut:r.statut, climatisee:r.climatisee, eauChaude:r.eau_chaude, equipements:r.equipements };
+}
+function clientToDb(c){
+  return { id:c.id, hotel_id:db.hotelId, nom:c.nom, prenom:c.prenom||null, type:c.type||'Particulier',
+    tel:c.tel||null, email:c.email||null, ville:c.ville||null, pays:c.pays||null, piece:c.piece||null,
+    num_piece:c.numPiece||null, note:c.note||null };
+}
+function clientFromDb(r){
+  return { id:r.id, nom:r.nom, prenom:r.prenom, type:r.type, tel:r.tel, email:r.email, ville:r.ville,
+    pays:r.pays, piece:r.piece, numPiece:r.num_piece, note:r.note };
+}
+function reservationToDb(r){
+  return { id:r.id, hotel_id:db.hotelId, ref:r.ref||null, client_id:r.clientId||null, chambre_id:r.chambreId||null,
+    arrivee:r.arrivee, depart:r.depart, nuits:r.nuits||null, montant:r.montant||0, paye:r.paye||0,
+    statut:r.statut, note:r.note||null };
+}
+function reservationFromDb(r){
+  return { id:r.id, ref:r.ref, clientId:r.client_id, chambreId:r.chambre_id, arrivee:r.arrivee, depart:r.depart,
+    nuits:r.nuits, montant:Number(r.montant), paye:Number(r.paye), statut:r.statut, note:r.note };
+}
+function factureToDb(f){
+  return { id:f.id, hotel_id:db.hotelId, numero:f.numero||null, date:f.date||null, client_id:f.clientId||null,
+    client_nom:f.clientNom||null, type:f.type||null, lignes:f.lignes||[], total_ht:f.totalHT||null, tva:f.tva||null,
+    total:f.total||0, paye:f.paye||0, statut:f.statut, ref_resa:f.refResa||null };
+}
+function factureFromDb(r){
+  return { id:r.id, numero:r.numero, date:r.date, clientId:r.client_id, clientNom:r.client_nom, type:r.type,
+    lignes:r.lignes||[], totalHT:r.total_ht, tva:r.tva, total:Number(r.total), paye:Number(r.paye),
+    statut:r.statut, refResa:r.ref_resa };
+}
+
+// Récupère le profil (rôle, hôtel) juste après une connexion réussie
+async function chargerSessionUtilisateur(userId, loginTape){
+  const { data: profile, error } = await sb.from('profiles').select('*').eq('id', userId).single();
+  if(error || !profile) return false;
+  db.hotelId = profile.hotel_id;
+  db.currentUser = { id:profile.id, login:loginTape||profile.nom, nom:profile.nom, role:profile.role, actif:profile.actif };
+  return true;
+}
+
+// Charge Chambres/Clients/Réservations/Factures depuis Supabase (remplace le localStorage pour ces 4 collections)
+async function chargerDonneesCoeur(){
+  if(!sb || !db.hotelId) return;
+  const [ch, cl, re, fa] = await Promise.all([
+    sb.from('chambres').select('*'),
+    sb.from('clients').select('*'),
+    sb.from('reservations').select('*'),
+    sb.from('factures').select('*'),
+  ]);
+  if(!ch.error) db.chambres = ch.data.map(chambreFromDb);
+  if(!cl.error) db.clients = cl.data.map(clientFromDb);
+  if(!re.error) db.reservations = re.data.map(reservationFromDb);
+  if(!fa.error) db.factures = fa.data.map(factureFromDb);
+}
+
+// Ré-écrit entièrement les 4 tables à partir de l'état actuel de db.* (upsert = crée ou met à jour)
+let _syncEnCours = null;
+async function syncCoeurVersSupabase(){
+  if(!sb || !db.hotelId) return;
+  if(_syncEnCours) await _syncEnCours;
+  _syncEnCours = (async ()=>{
+    try{
+      if(db.chambres?.length) await sb.from('chambres').upsert(db.chambres.map(chambreToDb));
+      if(db.clients?.length) await sb.from('clients').upsert(db.clients.map(clientToDb));
+      if(db.reservations?.length) await sb.from('reservations').upsert(db.reservations.map(reservationToDb));
+      if(db.factures?.length) await sb.from('factures').upsert(db.factures.map(factureToDb));
+    }catch(e){ console.error('Sync Supabase échouée', e); }
+  })();
+  await _syncEnCours;
+}
+
+// Cache la partie du menu que Ménage/Maintenance ne doivent pas voir
+function filtrerMenuParRole(){
+  const role = db.currentUser?.role;
+  const rolesRestreints = ['Ménage','Maintenance'];
+  document.querySelectorAll('.nav-item').forEach(item=>{ item.style.display=''; });
+  if(!rolesRestreints.includes(role)) return;
+  document.querySelectorAll('.nav-item').forEach(item=>{
+    if(item.dataset.page !== 'chambres') item.style.display = 'none';
+  });
+}
+
 // ============ STORE ============
 const STORE_KEY = 'raabo_amzara_v2';
 const defaultConfig = {
@@ -2574,6 +2674,7 @@ function loadDB(){
 }
 function saveDB(){
   localStorage.setItem(STORE_KEY, JSON.stringify(db));
+  if(sb && db.hotelId) syncCoeurVersSupabase();
 }
 function uid(prefix='id'){return prefix+'_'+Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
 function addDays(n){const d=new Date();d.setDate(d.getDate()+n);return d.toISOString().slice(0,10)}
@@ -2589,7 +2690,7 @@ function seedData(){
   const blocs = [
     {code:'MONUC', bloc:'Bloc 01 — MONUC / RDC',    count:10, prefix:'M', types:['Ventilée','Climatisée'], eauChaude:false},
     {code:'ONUCI', bloc:'Bloc 02 — ONUCI / RCI',    count:6,  prefix:'O', types:['Ventilée','Climatisée'], eauChaude:false},
-    {code:'AES',   bloc:'Bloc 03 — AES / VIP CEDEAO',count:15,prefix:'V', types:['VIP Climatisée'],         eauChaude:true},
+    {code:'AES',   bloc:'Bloc 03 — AES / VIP CEDEAO',count:15,prefix:'V', types:['VIP Ventilée','VIP Climatisée'], eauChaude:true},
     {code:'BUNG',  bloc:'Bloc 04 — Bungalows',      count:4,  prefix:'B', types:['Bungalow Ventilé'],       eauChaude:false}
   ];
   // Tarifs officiels : ventilation, climatisation, VIP et bungalows.
@@ -2601,6 +2702,7 @@ function seedData(){
       // Alterner ventilée/climatisée pour MONUC & ONUCI
       let type;
       if(b.code==='MONUC' || b.code==='ONUCI') type = i%2===0 ? 'Climatisée' : 'Ventilée';
+      else if(b.code==='AES') type = i<=10 ? 'VIP Ventilée' : 'VIP Climatisée';
       else type = b.types[0];
       db.chambres.push({
         id:uid('rm'),
@@ -2940,6 +3042,8 @@ function handleLogin(e){
 }
 function logout(){
   db.currentUser = null;
+  db.hotelId = null;
+  if(sb) sb.auth.signOut();
   saveDB();
   document.getElementById('app').classList.remove('active');
   document.getElementById('loginScreen').style.display='flex';
@@ -3380,6 +3484,7 @@ function editResa(id){openResaModal(id)}
 function deleteResa(id){
   confirmDialog('Supprimer cette réservation ?',()=>{
     db.reservations = db.reservations.filter(x=>x.id!==id);
+    if(sb) sb.from('reservations').delete().eq('id',id);
     saveDB();renderReservations();toast('Supprimée');
   });
 }
@@ -3518,6 +3623,7 @@ function editRoom(id){openRoomModal(id)}
 function deleteRoom(id){
   confirmDialog('Supprimer cette chambre ?',()=>{
     db.chambres = db.chambres.filter(x=>x.id!==id);
+    if(sb) sb.from('chambres').delete().eq('id',id);
     saveDB();renderRooms();toast('Supprimée');
   });
 }
@@ -3599,6 +3705,7 @@ function editClient(id){openClientModal(id)}
 function deleteClient(id){
   confirmDialog('Supprimer ce client ?',()=>{
     db.clients = db.clients.filter(x=>x.id!==id);
+    if(sb) sb.from('clients').delete().eq('id',id);
     saveDB();renderClients();toast('Supprimé');
   });
 }
@@ -3880,7 +3987,9 @@ function payerFacture(id){
 }
 function deleteFacture(id){
   confirmDialog('Supprimer cette facture ?',()=>{
-    db.factures=db.factures.filter(x=>x.id!==id);saveDB();renderFactures();toast('Supprimée');
+    db.factures=db.factures.filter(x=>x.id!==id);
+    if(sb) sb.from('factures').delete().eq('id',id);
+    saveDB();renderFactures();toast('Supprimée');
   });
 }
 
@@ -8618,22 +8727,37 @@ function confirmerPurgeAudit(){
 
   // -- AUTHENTIFICATION --
   const _handleLogin = handleLogin;
-  window.handleLogin = function(e){
+  window.handleLogin = async function(e){
     e.preventDefault();
     const u = document.getElementById('loginUser').value.trim();
     const p = document.getElementById('loginPass').value;
-    const user = db.users.find(x=>x.login===u && x.password===p && x.actif);
-    if(user){
-      db.currentUser = user;
-      logAudit('Authentification','login',u,'Connexion réussie de '+user.nom);
-      saveDB();
-      document.getElementById('loginScreen').style.display='none';
-      showApp();
-    } else {
+
+    if(!sb){
+      toast('Supabase non configuré (voir SUPABASE_URL / SUPABASE_ANON_KEY)','danger');
+      return;
+    }
+
+    const { data, error } = await sb.auth.signInWithPassword({ email: loginToEmail(u), password: p });
+    if(error || !data.user){
       logAudit('Authentification','critical',u,'❌ Tentative de connexion échouée pour login "'+u+'"');
       saveDB();
       toast('Identifiants incorrects','danger');
+      return;
     }
+
+    const ok = await chargerSessionUtilisateur(data.user.id, u);
+    if(!ok){
+      toast("Compte connecté mais non configuré côté application — contacte l'administrateur",'danger');
+      await sb.auth.signOut();
+      return;
+    }
+
+    await chargerDonneesCoeur();
+    logAudit('Authentification','login',u,'Connexion réussie de '+db.currentUser.nom);
+    saveDB();
+    document.getElementById('loginScreen').style.display='none';
+    filtrerMenuParRole();
+    showApp();
   };
 
   // -- DÉCONNEXION --
@@ -9075,13 +9199,26 @@ function closeModal(){
 
 // ============ INIT ============
 loadDB();
-// Log démarrage de l'app
-setTimeout(()=>{ try{ logAudit('Système','view','App','Démarrage de l\'application'); saveDB(); }catch(e){} }, 200);
-if(db.currentUser){
-  showApp();
-} else {
+async function demarrerApp(){
+  if(sb){
+    const { data:{ session } } = await sb.auth.getSession();
+    if(session?.user){
+      const ok = await chargerSessionUtilisateur(session.user.id);
+      if(ok){
+        await chargerDonneesCoeur();
+        setTimeout(()=>{ try{ logAudit('Système','view','App','Démarrage de l\'application'); saveDB(); }catch(e){} }, 200);
+        document.getElementById('loginScreen').style.display='none';
+        filtrerMenuParRole();
+        showApp();
+        return;
+      }
+    }
+  }
+  db.currentUser = null;
+  setTimeout(()=>{ try{ logAudit('Système','view','App','Démarrage de l\'application'); saveDB(); }catch(e){} }, 200);
   document.getElementById('loginScreen').style.display='flex';
 }
+demarrerApp();
 </script>
 <script>
   if ('serviceWorker' in navigator) {
