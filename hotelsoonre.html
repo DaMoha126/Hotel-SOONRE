@@ -2461,8 +2461,8 @@ textarea.form-control{min-height:80px;resize:vertical}
 ===================================================== */
 
 // ============ SUPABASE ============
-const SUPABASE_URL = 'https://gjgknrkwvjmkemcetngc.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdqZ2tucmt3dmpta2VtY2V0bmdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1ODkwMTAsImV4cCI6MjEwNTE2NTAxMH0.Gf75kqQD75uPexTJWfGB4LJ6fGnQdQsqnLF7pQqFJ44';
+const SUPABASE_URL = 'COLLE_ICI_TON_PROJECT_URL';
+const SUPABASE_ANON_KEY = 'COLLE_ICI_TA_CLE_ANON';
 const sb = (SUPABASE_URL.startsWith('http') && window.supabase)
   ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
   : null;
@@ -2508,6 +2508,71 @@ function factureFromDb(r){
     statut:r.statut, refResa:r.ref_resa };
 }
 
+function menuToDb(m){
+  return { id:m.id, hotel_id:db.hotelId, nom:m.nom, categorie:m.categorie||null, envoi:m.envoi||null,
+    prix:m.prix||0, cout:m.cout||null, disponible:!!m.disponible, description:m.description||null };
+}
+function menuFromDb(r){
+  return { id:r.id, nom:r.nom, categorie:r.categorie, envoi:r.envoi, prix:Number(r.prix), cout:r.cout,
+    disponible:r.disponible, description:r.description };
+}
+function commandeToDb(c){
+  return { id:c.id, hotel_id:db.hotelId, numero:c.numero||null, date:c.date||null, type_service:c.typeService||null,
+    table_nom:c.table||null, chambre_id:c.chambreId||null, client_nom:c.clientNom||null, couverts:c.couverts||null,
+    serveur:c.serveur||null, adresse:c.adresse||null, tel:c.tel||null, lignes:c.lignes||[], ss_total:c.ssTotal||null,
+    remise_pct:c.remisePct||null, remise:c.remise||null, pourboire:c.pourboire||null, total:c.total||0,
+    notes_gen:c.notesGen||null, statut:c.statut, paye:c.paye||0 };
+}
+function commandeFromDb(r){
+  return { id:r.id, numero:r.numero, date:r.date, typeService:r.type_service, table:r.table_nom, chambreId:r.chambre_id,
+    clientNom:r.client_nom, couverts:r.couverts, serveur:r.serveur, adresse:r.adresse, tel:r.tel, lignes:r.lignes||[],
+    ssTotal:r.ss_total, remisePct:r.remise_pct, remise:r.remise, pourboire:r.pourboire, total:Number(r.total),
+    notesGen:r.notes_gen, statut:r.statut, paye:Number(r.paye) };
+}
+function stockToDb(s){
+  return { id:s.id, hotel_id:db.hotelId, designation:s.designation, categorie:s.categorie||null, unite:s.unite||null,
+    quantite:s.quantite||0, seuil_alerte:s.seuilAlerte||null, prix_unitaire:s.prixUnitaire||null,
+    date_peremption:s.datePeremption||null, date_entree:s.dateEntree||null };
+}
+function stockFromDb(r){
+  return { id:r.id, designation:r.designation, categorie:r.categorie, unite:r.unite, quantite:Number(r.quantite),
+    seuilAlerte:r.seuil_alerte, prixUnitaire:r.prix_unitaire, datePeremption:r.date_peremption, dateEntree:r.date_entree };
+}
+function mouvStockToDb(m){
+  return { id:m.id, hotel_id:db.hotelId, date:m.date||null, article_id:m.articleId||null, type:m.type||null,
+    quantite:m.quantite||0, motif:m.motif||null };
+}
+function mouvStockFromDb(r){
+  return { id:r.id, date:r.date, articleId:r.article_id, type:r.type, quantite:Number(r.quantite), motif:r.motif };
+}
+function depenseToDb(d){
+  return { id:d.id, hotel_id:db.hotelId, description:d.description, categorie:d.categorie||null,
+    fournisseur:d.fournisseur||null, date:d.date||null, montant:d.montant||0, mode:d.mode||null, statut:d.statut||null };
+}
+function depenseFromDb(r){
+  return { id:r.id, description:r.description, categorie:r.categorie, fournisseur:r.fournisseur, date:r.date,
+    montant:Number(r.montant), mode:r.mode, statut:r.statut };
+}
+function caisseToDb(c){
+  return { id:c.id, hotel_id:db.hotelId, date:c.date||null, ref:c.ref||null, description:c.description||null,
+    type:c.type||null, mode:c.mode||null, montant:c.montant||0 };
+}
+function caisseFromDb(r){
+  return { id:r.id, date:r.date, ref:r.ref, description:r.description, type:r.type, mode:r.mode, montant:Number(r.montant) };
+}
+function sessionCaisseToDb(s){
+  return { id:s.id, hotel_id:db.hotelId, numero:s.numero||null, date_ouverture:s.dateOuverture||null,
+    ouverture_par:s.ouverturePar||null, fond_initial:s.fondInitial||null, note_ouverture:s.noteOuverture||null,
+    date_fermeture:s.dateFermeture||null, fermeture_par:s.fermeturePar||null, montant_compte:s.montantCompte||null,
+    montant_attendu:s.montantAttendu||null, ecart:s.ecart||null, note_fermeture:s.noteFermeture||null, statut:s.statut };
+}
+function sessionCaisseFromDb(r){
+  return { id:r.id, numero:r.numero, dateOuverture:r.date_ouverture, ouverturePar:r.ouverture_par,
+    fondInitial:r.fond_initial, noteOuverture:r.note_ouverture, dateFermeture:r.date_fermeture,
+    fermeturePar:r.fermeture_par, montantCompte:r.montant_compte, montantAttendu:r.montant_attendu,
+    ecart:r.ecart, noteFermeture:r.note_fermeture, statut:r.statut };
+}
+
 // Récupère le profil (rôle, hôtel) juste après une connexion réussie
 async function chargerSessionUtilisateur(userId, loginTape){
   const { data: profile, error } = await sb.from('profiles').select('*').eq('id', userId).single();
@@ -2520,16 +2585,30 @@ async function chargerSessionUtilisateur(userId, loginTape){
 // Charge Chambres/Clients/Réservations/Factures depuis Supabase (remplace le localStorage pour ces 4 collections)
 async function chargerDonneesCoeur(){
   if(!sb || !db.hotelId) return;
-  const [ch, cl, re, fa] = await Promise.all([
+  const [ch, cl, re, fa, mn, cm, st, ms, dp, ca, sc] = await Promise.all([
     sb.from('chambres').select('*'),
     sb.from('clients').select('*'),
     sb.from('reservations').select('*'),
     sb.from('factures').select('*'),
+    sb.from('menu').select('*'),
+    sb.from('commandes').select('*'),
+    sb.from('stock').select('*'),
+    sb.from('mouvements_stock').select('*'),
+    sb.from('depenses').select('*'),
+    sb.from('caisse').select('*'),
+    sb.from('sessions_caisse').select('*'),
   ]);
   if(!ch.error) db.chambres = ch.data.map(chambreFromDb);
   if(!cl.error) db.clients = cl.data.map(clientFromDb);
   if(!re.error) db.reservations = re.data.map(reservationFromDb);
   if(!fa.error) db.factures = fa.data.map(factureFromDb);
+  if(!mn.error) db.menu = mn.data.map(menuFromDb);
+  if(!cm.error) db.commandes = cm.data.map(commandeFromDb);
+  if(!st.error) db.stock = st.data.map(stockFromDb);
+  if(!ms.error) db.mouvementsStock = ms.data.map(mouvStockFromDb);
+  if(!dp.error) db.depenses = dp.data.map(depenseFromDb);
+  if(!ca.error) db.caisse = ca.data.map(caisseFromDb);
+  if(!sc.error) db.sessionsCaisse = sc.data.map(sessionCaisseFromDb);
 }
 
 // Ré-écrit entièrement les 4 tables à partir de l'état actuel de db.* (upsert = crée ou met à jour)
@@ -2543,6 +2622,13 @@ async function syncCoeurVersSupabase(){
       if(db.clients?.length) await sb.from('clients').upsert(db.clients.map(clientToDb));
       if(db.reservations?.length) await sb.from('reservations').upsert(db.reservations.map(reservationToDb));
       if(db.factures?.length) await sb.from('factures').upsert(db.factures.map(factureToDb));
+      if(db.menu?.length) await sb.from('menu').upsert(db.menu.map(menuToDb));
+      if(db.commandes?.length) await sb.from('commandes').upsert(db.commandes.map(commandeToDb));
+      if(db.stock?.length) await sb.from('stock').upsert(db.stock.map(stockToDb));
+      if(db.mouvementsStock?.length) await sb.from('mouvements_stock').upsert(db.mouvementsStock.map(mouvStockToDb));
+      if(db.depenses?.length) await sb.from('depenses').upsert(db.depenses.map(depenseToDb));
+      if(db.caisse?.length) await sb.from('caisse').upsert(db.caisse.map(caisseToDb));
+      if(db.sessionsCaisse?.length) await sb.from('sessions_caisse').upsert(db.sessionsCaisse.map(sessionCaisseToDb));
     }catch(e){ console.error('Sync Supabase échouée', e); }
   })();
   await _syncEnCours;
@@ -4453,7 +4539,9 @@ function saveDepense(e,id){
 function editDep(id){openDepenseModal(id)}
 function deleteDep(id){
   confirmDialog('Supprimer cette dépense ?',()=>{
-    db.depenses=db.depenses.filter(x=>x.id!==id);saveDB();renderDepenses();toast('Supprimée');
+    db.depenses=db.depenses.filter(x=>x.id!==id);
+    if(sb) sb.from('depenses').delete().eq('id',id);
+    saveDB();renderDepenses();toast('Supprimée');
   });
 }
 
@@ -5030,6 +5118,7 @@ function editStock(id){openStockModal(id)}
 function deleteStock(id){
   confirmDialog('Supprimer cet article ?',()=>{
     db.stock = db.stock.filter(x=>x.id!==id);
+    if(sb) sb.from('stock').delete().eq('id',id);
     saveDB();renderStock();toast('Supprimé','warning');
   });
 }
@@ -6732,6 +6821,7 @@ function deleteCmd(id){
       if(t){ t.statut='libre'; delete t.commandeId; }
     }
     db.commandes = db.commandes.filter(x=>x.id!==id);
+    if(sb) sb.from('commandes').delete().eq('id',id);
     saveDB(); renderCommandes(); toast('Commande supprimée','warning');
   });
 }
@@ -7174,6 +7264,13 @@ window.openMenuModal = function(id){
 };
 
 const _origSaveMenu = null;
+function deleteMenu(id){
+  confirmDialog('Retirer cet article du menu ?',()=>{
+    db.menu = db.menu.filter(x=>x.id!==id);
+    if(sb) sb.from('menu').delete().eq('id',id);
+    saveDB(); renderMenu(); toast('Article retiré','warning');
+  });
+}
 window.saveMenu = function(e,id){
   e.preventDefault();
   const data = {
