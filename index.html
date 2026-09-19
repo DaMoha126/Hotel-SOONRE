@@ -2378,6 +2378,7 @@ textarea.form-control{min-height:80px;resize:vertical}
         <div class="tabs">
           <div class="tab active" data-partab="general" onclick="switchParamTab('general')">Général</div>
           <div class="tab" data-partab="users" onclick="switchParamTab('users')">Utilisateurs</div>
+          <div class="tab" data-partab="moncompte" onclick="switchParamTab('moncompte')">Mon compte</div>
           <div class="tab" data-partab="data" onclick="switchParamTab('data')">Données</div>
         </div>
 
@@ -2407,6 +2408,19 @@ textarea.form-control{min-height:80px;resize:vertical}
           </div>
         </div>
 
+        <div id="param-moncompte" style="display:none">
+          <div class="card">
+            <h3>Changer mon mot de passe</h3>
+            <form id="pwForm" onsubmit="changerMonMotDePasse(event)">
+              <div class="form-grid">
+                <div class="form-group"><label>Nouveau mot de passe (6 caractères min.)</label><input type="password" class="form-control" id="pwNouveau" required minlength="6"></div>
+                <div class="form-group"><label>Confirmer le nouveau mot de passe</label><input type="password" class="form-control" id="pwConfirme" required minlength="6"></div>
+              </div>
+              <button class="btn btn-primary" type="submit">💾 Changer le mot de passe</button>
+            </form>
+          </div>
+        </div>
+
         <div id="param-users" style="display:none">
           <div class="filters">
             <button class="btn btn-primary" onclick="openUserModal()">+ Ajouter utilisateur</button>
@@ -2414,7 +2428,7 @@ textarea.form-control{min-height:80px;resize:vertical}
           <div class="card">
             <div class="table-wrap">
               <table>
-                <thead><tr><th>Nom</th><th>Rôle</th><th>Statut</th></tr></thead>
+                <thead><tr><th>Identifiant</th><th>Nom</th><th>Rôle</th><th>Statut</th><th>Actions</th></tr></thead>
                 <tbody id="usersTable"></tbody>
               </table>
             </div>
@@ -2461,8 +2475,8 @@ textarea.form-control{min-height:80px;resize:vertical}
 ===================================================== */
 
 // ============ SUPABASE ============
-const SUPABASE_URL = 'https://gjgknrkwvjmkemcetngc.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdqZ2tucmt3dmpta2VtY2V0bmdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1ODkwMTAsImV4cCI6MjEwNTE2NTAxMH0.Gf75kqQD75uPexTJWfGB4LJ6fGnQdQsqnLF7pQqFJ44';
+const SUPABASE_URL = 'COLLE_ICI_TON_PROJECT_URL';
+const SUPABASE_ANON_KEY = 'COLLE_ICI_TA_CLE_ANON';
 const sb = (SUPABASE_URL.startsWith('http') && window.supabase)
   ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
   : null;
@@ -4747,9 +4761,28 @@ function downloadFile(name,content){
 function switchParamTab(tab){
   document.querySelectorAll('[data-partab]').forEach(t=>t.classList.remove('active'));
   document.querySelector(`[data-partab="${tab}"]`).classList.add('active');
-  ['general','users','data'].forEach(t=>{
+  ['general','users','moncompte','data'].forEach(t=>{
     document.getElementById('param-'+t).style.display = t===tab?'block':'none';
   });
+}
+async function changerMonMotDePasse(e){
+  e.preventDefault();
+  const p1 = document.getElementById('pwNouveau').value;
+  const p2 = document.getElementById('pwConfirme').value;
+  if(p1.length<6){ toast('6 caractères minimum','warning'); return; }
+  if(p1!==p2){ toast('Les deux mots de passe ne correspondent pas','warning'); return; }
+  const { error } = await sb.auth.updateUser({ password: p1 });
+  if(error){ toast('Erreur : '+error.message,'danger'); return; }
+  document.getElementById('pwForm').reset();
+  toast('Mot de passe changé');
+}
+async function reinitialiserMotDePasse(userId, nom){
+  const nouveau = prompt(`Nouveau mot de passe pour ${nom} (6 caractères minimum) :`);
+  if(!nouveau) return;
+  if(nouveau.length<6){ toast('6 caractères minimum','warning'); return; }
+  const { error } = await sb.functions.invoke('reset-password', { body:{ userId, newPassword: nouveau } });
+  if(error){ toast('Erreur : '+(error.message||'réinitialisation impossible'),'danger'); return; }
+  toast('Mot de passe réinitialisé pour '+nom);
 }
 function renderConfig(){
   const c = db.config;
@@ -4784,16 +4817,18 @@ function saveConfig(){
 async function renderUsers(){
   const el = document.getElementById('usersTable');
   if(!el) return;
-  el.innerHTML = '<tr><td colspan="3">Chargement…</td></tr>';
-  const { data, error } = await sb.from('profiles').select('id,nom,role,actif').order('nom');
-  if(error){ el.innerHTML = `<tr><td colspan="3">Impossible de charger la liste (${error.message})</td></tr>`; return; }
+  el.innerHTML = '<tr><td colspan="5">Chargement…</td></tr>';
+  const { data, error } = await sb.from('profiles').select('id,nom,email,role,actif').order('nom');
+  if(error){ el.innerHTML = `<tr><td colspan="5">Impossible de charger la liste (${error.message})</td></tr>`; return; }
   el.innerHTML = data.map(u=>`
     <tr>
+      <td>${u.email ? u.email.replace('@hotelsoonre.local','') : '<span class="text-muted">—</span>'}</td>
       <td><strong>${u.nom}</strong></td>
       <td><span class="badge badge-neutral">${u.role}</span></td>
       <td>${u.actif?statutBadge('actif'):statutBadge('inactif')}</td>
+      <td><button class="btn btn-sm btn-ghost" onclick="reinitialiserMotDePasse('${u.id}', ${JSON.stringify(u.nom)})">🔑 Réinitialiser</button></td>
     </tr>
-  `).join('') || '<tr><td colspan="3">Aucun compte pour l\'instant</td></tr>';
+  `).join('') || '<tr><td colspan="5">Aucun compte pour l\'instant</td></tr>';
 }
 function openUserModal(){
   const rolesDisponibles = ['Directeur Général','Gérant','Accueil / Réception','Ménage','Maintenance'];
