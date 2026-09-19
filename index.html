@@ -2475,8 +2475,8 @@ textarea.form-control{min-height:80px;resize:vertical}
 ===================================================== */
 
 // ============ SUPABASE ============
-const SUPABASE_URL = 'https://gjgknrkwvjmkemcetngc.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdqZ2tucmt3dmpta2VtY2V0bmdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1ODkwMTAsImV4cCI6MjEwNTE2NTAxMH0.Gf75kqQD75uPexTJWfGB4LJ6fGnQdQsqnLF7pQqFJ44';
+const SUPABASE_URL = 'COLLE_ICI_TON_PROJECT_URL';
+const SUPABASE_ANON_KEY = 'COLLE_ICI_TA_CLE_ANON';
 const sb = (SUPABASE_URL.startsWith('http') && window.supabase)
   ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
   : null;
@@ -4776,13 +4776,23 @@ async function changerMonMotDePasse(e){
   document.getElementById('pwForm').reset();
   toast('Mot de passe changé');
 }
-async function reinitialiserMotDePasse(userId, nom){
-  const nouveau = prompt(`Nouveau mot de passe pour ${nom} (6 caractères minimum) :`);
-  if(!nouveau) return;
+function reinitialiserMotDePasse(userId, nom){
+  openModal('Réinitialiser le mot de passe',`
+    <p>Nouveau mot de passe pour <strong>${nom}</strong> :</p>
+    <form id="rpForm" onsubmit="confirmerReinitialisation(event,'${userId}')">
+      <div class="form-group"><input type="password" class="form-control" id="rpNouveau" required minlength="6" placeholder="6 caractères minimum" autofocus></div>
+    </form>
+  `,`<button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+     <button class="btn btn-primary" onclick="document.getElementById('rpForm').requestSubmit()">Réinitialiser</button>`);
+}
+async function confirmerReinitialisation(e, userId){
+  e.preventDefault();
+  const nouveau = document.getElementById('rpNouveau').value;
   if(nouveau.length<6){ toast('6 caractères minimum','warning'); return; }
   const { error } = await sb.functions.invoke('reset-password', { body:{ userId, newPassword: nouveau } });
   if(error){ toast('Erreur : '+(error.message||'réinitialisation impossible'),'danger'); return; }
-  toast('Mot de passe réinitialisé pour '+nom);
+  closeModal();
+  toast('Mot de passe réinitialisé');
 }
 function renderConfig(){
   const c = db.config;
@@ -4826,7 +4836,7 @@ async function renderUsers(){
       <td><strong>${u.nom}</strong></td>
       <td><span class="badge badge-neutral">${u.role}</span></td>
       <td>${u.actif?statutBadge('actif'):statutBadge('inactif')}</td>
-      <td><button class="btn btn-sm btn-ghost" onclick="reinitialiserMotDePasse('${u.id}', ${JSON.stringify(u.nom)})">🔑 Réinitialiser</button></td>
+      <td><button class="btn btn-sm btn-ghost" onclick="reinitialiserMotDePasse('${u.id}','${(u.nom||'').replace(/'/g,"\\'")}')">🔑 Réinitialiser</button></td>
     </tr>
   `).join('') || '<tr><td colspan="5">Aucun compte pour l\'instant</td></tr>';
 }
