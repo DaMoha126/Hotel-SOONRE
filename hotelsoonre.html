@@ -2414,7 +2414,7 @@ textarea.form-control{min-height:80px;resize:vertical}
           <div class="card">
             <div class="table-wrap">
               <table>
-                <thead><tr><th>Identifiant</th><th>Nom</th><th>Rôle</th><th>Statut</th><th>Actions</th></tr></thead>
+                <thead><tr><th>Nom</th><th>Rôle</th><th>Statut</th></tr></thead>
                 <tbody id="usersTable"></tbody>
               </table>
             </div>
@@ -2461,8 +2461,8 @@ textarea.form-control{min-height:80px;resize:vertical}
 ===================================================== */
 
 // ============ SUPABASE ============
-const SUPABASE_URL = 'https://gjgknrkwvjmkemcetngc.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdqZ2tucmt3dmpta2VtY2V0bmdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1ODkwMTAsImV4cCI6MjEwNTE2NTAxMH0.Gf75kqQD75uPexTJWfGB4LJ6fGnQdQsqnLF7pQqFJ44';
+const SUPABASE_URL = 'COLLE_ICI_TON_PROJECT_URL';
+const SUPABASE_ANON_KEY = 'COLLE_ICI_TA_CLE_ANON';
 const sb = (SUPABASE_URL.startsWith('http') && window.supabase)
   ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
   : null;
@@ -2634,15 +2634,23 @@ async function syncCoeurVersSupabase(){
   await _syncEnCours;
 }
 
-// Cache la partie du menu que Ménage/Maintenance ne doivent pas voir
+// Cache la partie du menu (et de Paramètres) que certains rôles ne doivent pas voir
 function filtrerMenuParRole(){
   const role = db.currentUser?.role;
-  const rolesRestreints = ['Ménage','Maintenance'];
+
   document.querySelectorAll('.nav-item').forEach(item=>{ item.style.display=''; });
-  if(!rolesRestreints.includes(role)) return;
-  document.querySelectorAll('.nav-item').forEach(item=>{
-    if(item.dataset.page !== 'chambres') item.style.display = 'none';
-  });
+  const rolesRestreints = ['Ménage','Maintenance'];
+  if(rolesRestreints.includes(role)){
+    document.querySelectorAll('.nav-item').forEach(item=>{
+      if(item.dataset.page !== 'chambres') item.style.display = 'none';
+    });
+    return;
+  }
+
+  // Seuls direction et gérance gèrent les comptes utilisateurs
+  const rolesGestionComptes = ['Directeur Général','Gérant','Super Administrateur'];
+  const ongletUsers = document.querySelector('[data-partab="users"]');
+  if(ongletUsers) ongletUsers.style.display = rolesGestionComptes.includes(role) ? '' : 'none';
 }
 
 // ============ STORE ============
@@ -4773,55 +4781,49 @@ function saveConfig(){
   });
   saveDB();toast('Configuration enregistrée');
 }
-function renderUsers(){
-  document.getElementById('usersTable').innerHTML = db.users.map(u=>`
+async function renderUsers(){
+  const el = document.getElementById('usersTable');
+  if(!el) return;
+  el.innerHTML = '<tr><td colspan="3">Chargement…</td></tr>';
+  const { data, error } = await sb.from('profiles').select('id,nom,role,actif').order('nom');
+  if(error){ el.innerHTML = `<tr><td colspan="3">Impossible de charger la liste (${error.message})</td></tr>`; return; }
+  el.innerHTML = data.map(u=>`
     <tr>
-      <td><strong>${u.login}</strong></td>
-      <td>${u.nom}</td>
+      <td><strong>${u.nom}</strong></td>
       <td><span class="badge badge-neutral">${u.role}</span></td>
       <td>${u.actif?statutBadge('actif'):statutBadge('inactif')}</td>
-      <td>
-        <button class="btn btn-sm btn-ghost" onclick="editUser('${u.id}')">✎</button>
-        ${u.login!=='admin'?`<button class="btn btn-sm btn-danger" onclick="deleteUser('${u.id}')">×</button>`:''}
-      </td>
     </tr>
-  `).join('');
+  `).join('') || '<tr><td colspan="3">Aucun compte pour l\'instant</td></tr>';
 }
-function openUserModal(id){
-  const u = id ? db.users.find(x=>x.id===id) : null;
-  openModal(id?'Modifier utilisateur':'Nouvel utilisateur',`
-    <form id="usForm" onsubmit="saveUser(event,'${id||''}')">
+function openUserModal(){
+  const rolesDisponibles = ['Directeur Général','Gérant','Accueil / Réception','Ménage','Maintenance'];
+  openModal('Nouvel utilisateur',`
+    <form id="usForm" onsubmit="saveUser(event)">
       <div class="form-grid">
-        <div class="form-group"><label>Identifiant *</label><input class="form-control" id="usLogin" required value="${u?u.login:''}"></div>
-        <div class="form-group"><label>Mot de passe ${id?'(laisser vide pour ne pas changer)':'*'}</label><input type="password" class="form-control" id="usPass" ${id?'':'required'}></div>
-        <div class="form-group"><label>Nom complet *</label><input class="form-control" id="usNom" required value="${u?u.nom:''}"></div>
-        <div class="form-group"><label>Rôle *</label>
-          <select class="form-control" id="usRole">${['Directeur Général','Gérant','Accueil / Réception','Comptable','Chef Cuisinier','Serveur','Agent de sécurité'].map(r=>`<option ${u&&u.role===r?'selected':''}>${r}</option>`).join('')}</select>
-        </div>
-        <div class="form-group full"><label>Statut</label>
-          <select class="form-control" id="usActif"><option value="1" ${!u||u.actif?'selected':''}>Actif</option><option value="0" ${u&&!u.actif?'selected':''}>Inactif</option></select>
+        <div class="form-group"><label>Identifiant de connexion *</label><input class="form-control" id="usLogin" required placeholder="ex : reception2"></div>
+        <div class="form-group"><label>Mot de passe * (6 caractères min.)</label><input type="password" class="form-control" id="usPass" required minlength="6"></div>
+        <div class="form-group"><label>Nom complet *</label><input class="form-control" id="usNom" required></div>
+        <div class="form-group full"><label>Rôle *</label>
+          <select class="form-control" id="usRole">${rolesDisponibles.map(r=>`<option>${r}</option>`).join('')}</select>
         </div>
       </div>
     </form>
   `,`<button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
-     <button class="btn btn-primary" onclick="document.getElementById('usForm').requestSubmit()">💾 Enregistrer</button>`);
+     <button class="btn btn-primary" onclick="document.getElementById('usForm').requestSubmit()">💾 Créer le compte</button>`);
 }
-function saveUser(e,id){
+async function saveUser(e){
   e.preventDefault();
-  const login = document.getElementById('usLogin').value;
-  const pass = document.getElementById('usPass').value;
-  const nom = document.getElementById('usNom').value;
+  const login = document.getElementById('usLogin').value.trim();
+  const password = document.getElementById('usPass').value;
+  const nom = document.getElementById('usNom').value.trim();
   const role = document.getElementById('usRole').value;
-  const actif = document.getElementById('usActif').value==='1';
-  if(id){
-    const u = db.users.find(x=>x.id===id);
-    u.login=login;u.nom=nom;u.role=role;u.actif=actif;
-    if(pass) u.password=pass;
-  } else {
-    if(db.users.some(x=>x.login===login)){toast('Identifiant déjà utilisé','error');return}
-    db.users.push({id:uid('u'),login,password:pass,nom,role,actif});
-  }
-  saveDB();closeModal();renderUsers();toast('Enregistré');
+  if(!login || password.length<6 || !nom){ toast('Vérifie les champs (mot de passe : 6 caractères minimum)','warning'); return; }
+
+  const { data, error } = await sb.functions.invoke('create-user', { body:{ login, password, nom, role } });
+  if(error){ toast('Erreur : '+(error.message||'création impossible'),'danger'); return; }
+  closeModal();
+  toast('Compte créé pour '+nom);
+  renderUsers();
 }
 function editUser(id){openUserModal(id)}
 function deleteUser(id){
