@@ -1,0 +1,14 @@
+{
+  "name": "hotel-soonre",
+  "private": true,
+  "version": "2.1.0",
+  "scripts": {
+    "test": "node tests/regression.cjs"
+  },
+  "devDependencies": {
+    "jsdom": "26.1.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
