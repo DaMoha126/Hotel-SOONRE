@@ -19,6 +19,14 @@ const syncChecks=await dom.window.eval(`(async()=>{
  check(sent.length===1&&sent[0].length===1&&sent[0][0].table==='clients','Writes changed rows only');check(sent[0][0].version===1,'Sends expected version');check(!window.hotelSyncPending,'Confirms successful remote save');
  db.clients=[];await queueCloudSync();check(sent[1][0].delete===true&&sent[1][0].version===2,'Executes versioned deletion');
  db.clients=[{id:'new',nom:'New'}];sb.rpc=async()=>({error:{message:'Simulated refusal'}});await queueCloudSync();check(window.hotelSyncPending,'Keeps failed save pending');check(!cloudBaseline.has('clients:new'),'Does not advance baseline on failure');check(!!localStorage.getItem(recoveryKey()),'Retains failed changes for recovery');
+ const saved=JSON.parse(localStorage.getItem(recoveryKey()));
+ check(saved.formatVersion===2&&saved.snapshot.clients[0].id==='new'&&!saved.snapshot.currentUser,'Stores recovery without session identity');
+ check(recoveryBlocked&&document.getElementById('pendingRecovery'),'Blocks editing while recovery awaits a choice');
+ db.clients=[];cloudBaseline.clear();baselineVersions.clear();
+ sb.rpc=async(name,args)=>{sent.push(args.p_changes);return {data:args.p_changes.map(r=>({table:r.table,id:r.id,deleted:!!r.delete,version:1})),error:null};};
+ await retryRecovery();
+ check(db.clients[0].id==='new'&&sent.at(-1)[0].version===null,'Restores saved changes and original expected versions');
+ check(!window.hotelSyncPending&&!recoveryBlocked&&!localStorage.getItem(recoveryKey())&&!document.getElementById('pendingRecovery'),'Clears recovery only after confirmed save');
  cloudReady=false;sb.from=()=>({select:()=>({eq:()=>({single:async()=>({data:{id:'inactive',hotel_id:db.hotelId,role:'Gérant',actif:false}})})})});check(await chargerSessionUtilisateur('inactive','x')===false,'Rejects inactive profile');
  return passed;
 })()`);console.log(syncChecks.map(x=>'PASS '+x).join('\n'));dom.window.close();})().catch(e=>{console.error(e);process.exit(1)});
