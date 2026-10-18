@@ -301,6 +301,7 @@ async function logout(){
  await syncQueue.catch(()=>{});
  const oldHotel=db.hotelId;
  if(sb)await sb.auth.signOut();
+ clearRecoveryAction();window.hotelSyncPending=false;recoveryBlocked=false;
  db.currentUser=null;db.hotelId=null;cloudReady=false;
  clearSensitiveState();persistLocal();
  document.getElementById('app').classList.remove('active');
@@ -1731,7 +1732,7 @@ function renderPersonnel(){
       <td><span class="badge badge-neutral">${escapeHtml(p.service)}</span></td>
       <td>${escapeHtml(p.tel)}</td>
       <td>${escapeHtml(fmt(p.salaire))}</td>
-      <td>${escapeHtml(p.actif?statutBadge('actif'):statutBadge('inactif'))}</td>
+      <td>${statutBadge(p.actif?'actif':'inactif')}</td>
       <td>
         <button class="btn btn-sm btn-ghost" onclick="editEmp('${escapeInline(p.id)}')">✎</button>
         <button class="btn btn-sm btn-danger" onclick="deleteEmp('${escapeInline(p.id)}')">×</button>
@@ -1984,7 +1985,7 @@ async function renderUsers(){
       <td>${u.email ? escapeHtml(u.email.replace('@hotelsoonre.local','')) : '<span class="text-muted">—</span>'}</td>
       <td><strong>${escapeHtml(u.nom)}</strong></td>
       <td><span class="badge badge-neutral">${escapeHtml(u.role)}</span></td>
-      <td>${escapeHtml(u.actif?statutBadge('actif'):statutBadge('inactif'))}</td>
+      <td>${statutBadge(u.actif?'actif':'inactif')}</td>
       <td><button class="btn btn-sm btn-ghost" onclick="reinitialiserMotDePasse('${escapeInline(u.id)}')">🔑 Réinitialiser</button></td>
     </tr>
   `).join('') || '<tr><td colspan="5">Aucun compte pour l\'instant</td></tr>';
@@ -2026,15 +2027,15 @@ function importData(e){
   const file = e.target.files[0];
   if(!file) return;
   const reader = new FileReader();
-  reader.onload = ev=>{
+  reader.onload = async ev=>{
     try{
       const data = JSON.parse(ev.target.result);
       if(!confirm('Cette action remplacera toutes les données actuelles. Continuer ?')) return;
       if(!requireManager())return;
       validateImport(data);
       for(const key of IMPORT_KEYS)if(Object.hasOwn(data,key))db[key]=data[key];
-      saveDB();toast('Données importées');
-      setTimeout(()=>location.reload(),1000);
+      saveDB();await queueCloudSync();
+      if(!window.hotelSyncPending){renderAll();toast('Données importées et sauvegardées');}
     }catch(err){toast('Fichier invalide : '+err.message,'error')}
   };
   reader.readAsText(file);
@@ -6516,11 +6517,11 @@ async function readAll(table){
  for(let start=0;;start+=500){const{data,error}=await sb.from(table).select('*').eq('hotel_id',db.hotelId).order('id').range(start,start+499);if(error)throw new Error('Chargement '+table+' : '+error.message);rows.push(...data);if(data.length<500)break;}
  return rows;
 }
-async function loadCloudState(){
+async function loadCloudState({preserveLocalModules=true}={}){
  if(!sb||!db.hotelId||!db.currentUser?.actif)throw new Error('Session inactive');
  cloudReady=false;await syncQueue.catch(()=>{});
  const owner=db.hotelId;const cached={};
- if(localOwner===owner&&isManager())for(const name of MODULES)if((legacyCache?.[name]??db[name])!==undefined)cached[name]=structuredClone(legacyCache?.[name]??db[name]);
+ if(preserveLocalModules&&localOwner===owner&&isManager())for(const name of MODULES)if((legacyCache?.[name]??db[name])!==undefined)cached[name]=structuredClone(legacyCache?.[name]??db[name]);
  const tables=await Promise.all(CORE.map(x=>readAll(x[1])));const modules=await readAll('app_collections');
  clearSensitiveState();cloudBaseline.clear();baselineVersions.clear();
  CORE.forEach(([key,table,toDb,fromDb],i)=>{
@@ -6535,18 +6536,55 @@ async function loadCloudState(){
  }
  localOwner=owner;legacyCache=null;cloudReady=true;window.hotelSyncPending=false;persistLocal();
  const recovery=localStorage.getItem(recoveryKey());
- recoveryBlocked=!!recovery;
- if(recovery){toast('Une copie de modifications non synchronisées est disponible : exportez-la avant une restauration','warning');showRecoveryAction();}
+ recoveryBlocked=!!recovery;window.hotelSyncPending=!!recovery;
+ if(recovery){toast('Des modifications attendent votre choix de récupération','warning');showRecoveryAction();}else clearRecoveryAction();
 }
 function recoveryKey(){return 'soonre-pending:'+db.hotelId+':'+db.currentUser.id;}
+function persistRecovery(){
+ const snapshot=Object.fromEntries(IMPORT_KEYS.filter(k=>Object.hasOwn(db,k)).map(k=>[k,db[k]]));
+ localStorage.setItem(recoveryKey(),JSON.stringify({formatVersion:2,hotelId:db.hotelId,userId:db.currentUser.id,snapshot,baseline:[...cloudBaseline],versions:[...baselineVersions]}));
+}
+function clearRecoveryAction(){
+ document.getElementById('pendingRecovery')?.remove();
+ document.querySelectorAll('#app .content,#modalOverlay').forEach(el=>el.inert=false);
+}
+async function retryRecovery(){
+ try{
+  const saved=JSON.parse(localStorage.getItem(recoveryKey()));
+  if(saved?.formatVersion!==2||saved.hotelId!==db.hotelId||saved.userId!==db.currentUser.id)throw new Error('Cette ancienne copie doit être exportée pour récupération manuelle');
+  validateImport(saved.snapshot);
+  for(const key of IMPORT_KEYS)if(Object.hasOwn(saved.snapshot,key))db[key]=saved.snapshot[key];
+  cloudBaseline=new Map(saved.baseline);baselineVersions=new Map(saved.versions);
+  recoveryBlocked=false;persistLocal();await queueCloudSync();
+  if(!window.hotelSyncPending){clearRecoveryAction();renderAll();}
+ }catch(error){toast(error.message,'danger');}
+}
 function showRecoveryAction(){
+ recoveryBlocked=true;window.hotelSyncPending=true;
+ document.querySelectorAll('#app .content,#modalOverlay').forEach(el=>el.inert=true);
  if(document.getElementById('pendingRecovery'))return;
- const b=document.createElement('button');b.id='pendingRecovery';b.className='btn btn-ghost';b.textContent='Exporter les modifications non synchronisées';b.onclick=()=>{const raw=localStorage.getItem(recoveryKey());if(raw){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(Object.fromEntries(IMPORT_KEYS.filter(k=>Object.hasOwn(JSON.parse(raw),k)).map(k=>[k,JSON.parse(raw)[k]])),null,2)],{type:'application/json'}));a.download='soonre-recuperation.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);if(confirm('La copie a été exportée. Reprendre le travail avec les données actuelles du serveur ?')){localStorage.removeItem(recoveryKey());recoveryBlocked=false;b.remove();}}};document.getElementById('app').prepend(b);
+ const banner=document.createElement('div');banner.id='pendingRecovery';banner.className='card';
+ const label=document.createElement('p');label.textContent='Modifications non sauvegardées : réessayez, exportez une copie ou rechargez les données serveur.';banner.append(label);
+ const action=(label,handler)=>{const b=document.createElement('button');b.className='btn btn-ghost';b.textContent=label;b.onclick=handler;banner.append(b);};
+ action('Réessayer la sauvegarde',()=>retryRecovery());
+ action('Exporter la copie',()=>{
+  try{const saved=JSON.parse(localStorage.getItem(recoveryKey()));const source=saved?.formatVersion===2?saved.snapshot:saved;
+   const exported=Object.fromEntries(IMPORT_KEYS.filter(k=>Object.hasOwn(source,k)).map(k=>[k,source[k]]));
+   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(exported,null,2)],{type:'application/json'}));a.download='soonre-recuperation.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  }catch(error){toast('Export impossible : '+error.message,'danger');}
+ });
+ action('Recharger les données serveur',async()=>{
+  if(!confirm('Abandonner les modifications locales non sauvegardées et recharger les données serveur ?'))return;
+  const key=recoveryKey();
+  try{await loadCloudState({preserveLocalModules:false});localStorage.removeItem(key);recoveryBlocked=false;window.hotelSyncPending=false;clearRecoveryAction();renderAll();}
+  catch(error){toast('Rechargement impossible : '+error.message,'danger');}
+ });
+ document.getElementById('app').prepend(banner);
 }
 function queueCloudSync(){
  if(!cloudReady||!db.currentUser?.actif||recoveryBlocked)return syncQueue;
  window.hotelSyncPending=true;
- try{localStorage.setItem(recoveryKey(),JSON.stringify(db));}catch{}
+ try{persistRecovery();}catch(error){toast('Copie de récupération indisponible : '+error.message,'warning');}
  if(syncScheduled)return syncQueue;
  syncScheduled=true;
  syncQueue=syncQueue.catch(()=>{}).then(async()=>{
@@ -6558,7 +6596,8 @@ function queueCloudSync(){
     changes.push({...row,version:baselineVersions.get(key)??null});
    }
    for(const[key,data]of cloudBaseline)if(!rows.has(key)){const split=key.indexOf(':');changes.push({table:key.slice(0,split),id:key.slice(split+1),version:baselineVersions.get(key),delete:true});}
-   if(!changes.length){window.hotelSyncPending=false;localStorage.removeItem(recoveryKey());break;}
+   if(!changes.length){window.hotelSyncPending=false;localStorage.removeItem(recoveryKey());clearRecoveryAction();break;}
+   persistRecovery();
    const{data,error}=await sb.rpc('sync_hotel_changes',{p_hotel:db.hotelId,p_changes:changes});
    if(error)throw new Error(error.message);
    for(const result of data){const key=result.table+':'+result.id;if(result.deleted){cloudBaseline.delete(key);baselineVersions.delete(key);}else{const sent=changes.find(x=>x.table===result.table&&x.id===result.id);cloudBaseline.set(key,JSON.stringify(sent.data));baselineVersions.set(key,result.version);}}

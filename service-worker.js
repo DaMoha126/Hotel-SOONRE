@@ -1,4 +1,4 @@
-const CACHE='hotel-soonre-security-v5';
+const CACHE='hotel-soonre-security-v6';
 const ASSETS=['./index.html','./hotelsoonre.html','./app.js','./manifest.webmanifest','./icon.svg','./vendor/purify.min.js','./vendor/supabase.js','./vendor/chart.umd.min.js'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key.startsWith('hotel-soonre-')&&key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim())));
