@@ -37,6 +37,8 @@ const extraChecks=await dom.window.eval(`(async()=>{
  openPaieModal(db.paies[0].id);document.getElementById('pyCn').value='5';document.getElementById('pyIr').value='7';calcPaie();check(document.getElementById('pyCn').value==='5'&&document.getElementById('pyIr').value==='7','Payroll net calculation preserves explicitly entered deductions');
  db.stock=[{id:'stock-test',designation:'Test',quantite:3,unite:'u',prixUnitaire:10,seuilAlerte:1,categorie:'Test'}];const stockBefore=db.mouvementsStock.length;openMouvStockModal();document.getElementById('mvQt').value='5';document.getElementById('mvType').value='sortie';saveMouvStock({preventDefault(){}});check(db.stock[0].quantite===3&&db.mouvementsStock.length===stockBefore,'Rejects stock withdrawal beyond available quantity');
 
+ db.depenses=[{id:'expense-test',description:'Test',montant:25,date:'2099-01-01',mode:'virement',statut:'impaye'}];const expensesBefore=db.caisse.length;openDepenseModal('expense-test');document.getElementById('dpStatut').value='paye';saveDepense({preventDefault(){}},'expense-test');check(db.caisse.length===expensesBefore+1&&db.caisse.at(-1).id==='EXP-expense-test','Paying an existing expense creates its linked cash movement');
+ saveDepense({preventDefault(){}},'expense-test');check(db.caisse.length===expensesBefore+1,'Repeated expense confirmation creates no duplicate cash movement');deleteDep('expense-test');check(db.depenses.length===1,'Preserves paid expense history');
  closeModal();cloudReady=false;return passed;
 })()`);console.log(extraChecks.map(x=>'PASS '+x).join('\n'));
 const pages=await dom.window.eval(`(async()=>{

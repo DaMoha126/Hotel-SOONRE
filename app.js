@@ -1280,6 +1280,7 @@ async function payerFacture(id){
  try{await loadCloudState();renderFactures();renderCaisse();toast('Paiement confirmé par le serveur');}catch(error){toast('Paiement enregistré ; rechargez les données : '+error.message,'warning');}
 }
 function deleteFacture(id){
+  if(db.factures.find(f=>f.id===id)?.paye>0){toast('Une facture encaissée ne peut pas être supprimée','warning');return;}
   confirmDialog('Supprimer cette facture ?',()=>{
     db.factures=db.factures.filter(x=>x.id!==id);
     // Deletion is committed atomically by the versioned synchronizer.
@@ -1659,6 +1660,7 @@ function saveMouvement(e){
   saveDB();closeModal();renderCaisse();toast('Enregistré');
 }
 function deleteMouv(id){
+  if(/^(PAY-|RPAY-|EXP-)/.test(id)){toast('Ce mouvement est lié à un document payé','warning');return;}
   confirmDialog('Supprimer ce mouvement ?',()=>{
     db.caisse=db.caisse.filter(x=>x.id!==id);saveDB();renderCaisse();toast('Supprimé');
   });
@@ -1721,7 +1723,7 @@ function openDepenseModal(id){
      <button class="btn btn-primary" onclick="document.getElementById('dpForm').requestSubmit()">💾 Enregistrer</button>`);
 }
 function saveDepense(e,id){
-  e.preventDefault();
+  e.preventDefault();id=id||document.getElementById('dpForm')?.dataset.savedId||'';
   const data = {
     description:document.getElementById('dpDesc').value,
     categorie:document.getElementById('dpCat').value,
@@ -1731,21 +1733,17 @@ function saveDepense(e,id){
     mode:document.getElementById('dpMode').value,
     statut:document.getElementById('dpStatut').value
   };
-  if(id){
-    Object.assign(db.depenses.find(x=>x.id===id),data);
-  } else {
-    db.depenses.push({id:uid('dp'),...data});
-    if(data.statut==='paye'){
-      db.caisse.push({
-        id:uid('cs'),date:data.date,ref:'DEP-'+(4000+db.caisse.length),
-        description:data.description,type:'sortie',mode:data.mode,montant:data.montant
-      });
-    }
-  }
+  data.description=data.description.trim();const previous=id?db.depenses.find(x=>x.id===id):null;
+  if(!data.description||!Number.isFinite(data.montant)||data.montant<=0||!data.date||!['paye','impaye'].includes(data.statut)){toast('Vérifiez la dépense et son montant','warning');return;}
+  if(previous?.statut==='paye'){toast('Une dépense payée ne peut pas être modifiée','warning');return;}
+  if(data.statut==='paye'&&data.mode==='espece'&&!sessionActive()){toast('Ouvrez la caisse avant un paiement en espèces','warning');return;}
+  const entry=previous||{id:uid('dp')};Object.assign(entry,data);if(!previous)db.depenses.push(entry);document.getElementById('dpForm').dataset.savedId=entry.id;
+  if(data.statut==='paye')db.caisse.push({id:'EXP-'+entry.id,date:data.date,ref:'DEP-'+entry.id,description:data.description,type:'sortie',mode:data.mode,montant:data.montant,sessionId:sessionActive()?.id||null});
   saveDB();closeModal();renderDepenses();toast('Enregistré');
 }
 function editDep(id){openDepenseModal(id)}
 function deleteDep(id){
+  if(db.depenses.find(d=>d.id===id)?.statut==='paye'){toast('Une dépense payée doit rester dans l’historique','warning');return;}
   confirmDialog('Supprimer cette dépense ?',()=>{
     db.depenses=db.depenses.filter(x=>x.id!==id);
     // Deletion is committed atomically by the versioned synchronizer.
@@ -1765,7 +1763,7 @@ function renderPersonnel(){
   document.getElementById('personnelTable').innerHTML = list.length ? list.map(p=>`
     <tr>
       <td><strong>${escapeHtml(p.matricule||'—')}</strong></td>
-      <td>${escapeHtml(p.prenom)} ${escapeHtml(p.nom)}${p.cnss?'<br><small style="color:var(--muted)">CNSS: '+p.cnss+'</small>':escapeHtml('')}</td>
+      <td>${escapeHtml(p.prenom)} ${escapeHtml(p.nom)}${p.cnss?'<br><small style="color:var(--muted)">CNSS: '+escapeHtml(p.cnss)+'</small>':escapeHtml('')}</td>
       <td>${escapeHtml(p.poste)}</td>
       <td><span class="badge badge-neutral">${escapeHtml(p.service)}</span></td>
       <td>${escapeHtml(p.tel)}</td>
@@ -3834,7 +3832,7 @@ function refreshCmdLignes(){
 }
 
 function saveCommande(e, id){
-  e.preventDefault();
+  e.preventDefault();if(id&&db.commandes.find(c=>c.id===id)?.paye>0){toast('Une commande encaissée ne peut pas être modifiée','warning');return;}
   if(!cmdLignes.length){toast('Ajoutez au moins un article','warning');return}
   const ssTot = cmdLignes.reduce((s,l)=>s+l.qte*l.pu,0);
   const rem = parseFloat(document.getElementById('cmdRemise').value)||0;
@@ -4945,7 +4943,7 @@ function saveDoc(e, type, id){
   };
 
   if(id){
-    Object.assign(db[col].find(x=>x.id===id), data);
+    data.id=id;Object.assign(db[col].find(x=>x.id===id), data);
   } else {
     data.id = uid(cfg.prefix.toLowerCase());
     db[col].push(data);
@@ -5221,6 +5219,7 @@ function convertirEnFacture(id, sourceType){
 
 // ============ SUPPRESSION ============
 function deleteDoc(id, type){
+  if(type==='facture'&&db.factures.find(f=>f.id===id)?.paye>0){toast('Une facture encaissée ne peut pas être supprimée','warning');return;}
   const col = type==='facture'?'factures':(type==='proforma'?'proformas':'devis');
   const cfg = DOC_TYPES[type];
   confirmDialog(`Supprimer ${cfg.label.toLowerCase()} ?`, ()=>{
