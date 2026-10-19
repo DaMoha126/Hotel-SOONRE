@@ -45,10 +45,10 @@ function reservationFromDb(r){
 function factureToDb(f){
   return { id:f.id, hotel_id:db.hotelId, numero:f.numero||null, date:f.date||null, client_id:f.clientId||null,
     client_nom:f.clientNom||null, type:f.type||null, lignes:f.lignes||[], total_ht:f.totalHT||null, tva:f.tva||null,
-    total:f.total||0, paye:f.paye||0, statut:f.statut, ref_resa:f.refResa||null, ref_cmd:f.refCmd||null };
+    total:f.total||0, paye:f.paye||0, statut:f.statut, ref_resa:f.refResa||null, ref_cmd:f.refCmd||null, metadata:Object.fromEntries(['clientTel','objet','ssTotal','remisePct','remise','tvaPct','notes','sourceType','sourceId','sourceNumero'].filter(k=>f[k]!==undefined).map(k=>[k,f[k]])) };
 }
 function factureFromDb(r){
-  return { id:r.id, numero:r.numero, date:r.date, clientId:r.client_id, clientNom:r.client_nom, type:r.type,
+  return { ...Object.fromEntries(['clientTel','objet','ssTotal','remisePct','remise','tvaPct','notes','sourceType','sourceId','sourceNumero'].filter(k=>Object.hasOwn(r.metadata||{},k)).map(k=>[k,r.metadata[k]])), id:r.id, numero:r.numero, date:r.date, clientId:r.client_id, clientNom:r.client_nom, type:r.type,
     lignes:r.lignes||[], totalHT:r.total_ht, tva:r.tva, total:Number(r.total), paye:Number(r.paye),
     statut:r.statut, refResa:r.ref_resa, refCmd:r.ref_cmd };
 }
@@ -66,13 +66,13 @@ function commandeToDb(c){
     table_nom:c.table||null, chambre_id:c.chambreId||null, client_nom:c.clientNom||null, couverts:c.couverts||null,
     serveur:c.serveur||null, adresse:c.adresse||null, tel:c.tel||null, lignes:c.lignes||[], ss_total:c.ssTotal||null,
     remise_pct:c.remisePct||null, remise:c.remise||null, pourboire:c.pourboire||null, total:c.total||0,
-    notes_gen:c.notesGen||null, statut:c.statut, paye:c.paye||0 };
+    notes_gen:c.notesGen||null, statut:c.statut, paye:c.paye||0, metadata:c.metadata||{} };
 }
 function commandeFromDb(r){
   return { id:r.id, numero:r.numero, date:r.date, typeService:r.type_service, table:r.table_nom, chambreId:r.chambre_id,
     clientNom:r.client_nom, couverts:r.couverts, serveur:r.serveur, adresse:r.adresse, tel:r.tel, lignes:r.lignes||[],
     ssTotal:r.ss_total, remisePct:r.remise_pct, remise:r.remise, pourboire:r.pourboire, total:Number(r.total),
-    notesGen:r.notes_gen, statut:r.statut, paye:Number(r.paye) };
+    notesGen:r.notes_gen, statut:r.statut, paye:Number(r.paye), metadata:r.metadata||{}, paiements:r.metadata?.paiements||[], datePaiement:r.metadata?.date_paiement||null };
 }
 function stockToDb(s){
   return { id:s.id, hotel_id:db.hotelId, designation:s.designation, categorie:s.categorie||null, unite:s.unite||null,
@@ -301,7 +301,7 @@ async function logout(){
  await syncQueue.catch(()=>{});
  const oldHotel=db.hotelId;
  if(sb)await sb.auth.signOut();
- clearRecoveryAction();window.hotelSyncPending=false;recoveryBlocked=false;
+ clearRecoveryAction();document.getElementById('syncStatus')?.remove();document.getElementById('activeHotel')?.remove();window.hotelSyncPending=false;recoveryBlocked=false;
  db.currentUser=null;db.hotelId=null;cloudReady=false;
  clearSensitiveState();persistLocal();
  document.getElementById('app').classList.remove('active');
@@ -386,6 +386,21 @@ function renderPage(name){
     case 'parametres': renderConfig(); renderUsers(); break;
   }
 }
+function updateSyncStatus(){
+ if(!db.currentUser)return;
+ let status=document.getElementById('syncStatus');if(!status){status=document.createElement('button');status.id='syncStatus';status.className='btn btn-sm btn-ghost';status.setAttribute('aria-live','polite');status.onclick=()=>{if(window.hotelSyncPending)showRecoveryAction();else toast('Toutes les modifications sont sauvegardées sur le serveur');};document.querySelector('.topbar-right').prepend(status);}
+ status.textContent=recoveryBlocked?'⚠ Sauvegarde à récupérer':!navigator.onLine?'Hors ligne':window.hotelSyncPending?'Sauvegarde en cours…':'✓ Sauvegardé';
+}
+function renderSetupStatus(){
+ let card=document.getElementById('setupStatus');if(!isManager()){card?.remove();return;}
+ const missing=[];
+ if(!db.chambres.length)missing.push({label:'Ajouter les chambres et leurs tarifs',page:'chambres'});
+ if(!db.config.adresse||!db.config.tel)missing.push({label:'Compléter les coordonnées de facturation',page:'parametres'});
+ if(!missing.length){card?.remove();return;}
+ if(!card){card=document.createElement('div');card.id='setupStatus';card.className='card';document.getElementById('page-dashboard').prepend(card);}
+ card.replaceChildren();const title=document.createElement('strong');title.textContent='Mise en service à terminer';card.append(title);
+ for(const item of missing){const button=document.createElement('button');button.className='btn btn-sm btn-ghost';button.textContent=item.label;button.onclick=()=>showPage(item.page);card.append(button);}
+}
 function renderAll(){
   renderDashboard();
 }
@@ -393,6 +408,7 @@ function renderAll(){
 // ============ DASHBOARD ============
 let revenueChart, repartChart, occupChart;
 function renderDashboard(){
+  renderSetupStatus();updateSyncStatus();
   const now = new Date();
   const monthStart = new Date(now.getFullYear(),now.getMonth(),1);
   const monthCA = db.factures
@@ -656,8 +672,8 @@ function openResaModal(id){
           <input type="number" class="form-control" id="rMontant" value="${escapeHtml(r?r.montant:0)}" readonly style="background:var(--cream)">
         </div>
         <div class="form-group">
-          <label>Acompte payé</label>
-          <input type="number" class="form-control" id="rPaye" value="${escapeHtml(r?r.paye:0)}" min="0">
+          <label>Déjà encaissé (via la facture)</label>
+          <input type="number" class="form-control" id="rPaye" value="${escapeHtml(r?r.paye:0)}" min="0" readonly><small>Enregistrez le séjour, puis utilisez « Facturer le séjour » pour encaisser un acompte.</small>
         </div>
         <div class="form-group">
           <label>Statut</label>
@@ -704,6 +720,9 @@ function saveResa(e,id){
   const nuits = Math.round((new Date(depart)-new Date(arrivee))/86400000);
   if(!Number.isFinite(montant)||!Number.isFinite(paye)||montant<0||paye<0||paye>montant){toast('Montants invalides','error');return;}
   if(['confirmee','checkin'].includes(statut) && db.reservations.some(r=>r.id!==id&&r.chambreId===chambreId&&['confirmee','checkin'].includes(r.statut)&&r.arrivee<depart&&r.depart>arrivee)){toast('Cette chambre est déjà réservée sur ces dates','error');return;}
+  const existing=id?db.reservations.find(r=>r.id===id):null;
+  if(paye!==(existing?.paye||0)){toast('Utilisez la facture pour enregistrer un paiement','warning');return;}
+  if(existing&&db.factures.some(f=>f.refResa===id)&&(['clientId','chambreId','arrivee','depart','montant'].some(k=>existing[k]!==({clientId,chambreId,arrivee,depart,montant})[k])||statut==='annulee')){toast('Séjour facturé : dates, chambre et montant verrouillés','warning');return;}
   const oldRoom=id?db.reservations.find(r=>r.id===id)?.chambreId:null;
   if(id){
     const r = db.reservations.find(x=>x.id===id);
@@ -741,16 +760,21 @@ function viewResa(id){
     ${r.note?`<div style="margin-top:14px"><h5 style="color:var(--muted);font-size:11px">NOTES</h5><div>${escapeHtml(r.note)}</div></div>`:''}
   `,`<button class="btn btn-ghost" onclick="closeModal()">Fermer</button>${r.statut!=='annulee'?`<button class="btn btn-gold" onclick="facturerSejour('${escapeInline(r.id)}')">Facturer le séjour</button>`:''}`);
 }
+async function safeQuery(query){try{return await query;}catch{return {data:null,error:{message:'Connexion interrompue. Réessayez après le retour du réseau.'}};}}
+async function callServerRPC(name,args){
+ try{return await sb.rpc(name,args);}catch(error){return {data:null,error:{message:'Connexion interrompue. Vérifiez le réseau et réessayez.'}};}
+}
 async function facturerSejour(id){
  if(!cloudReady||recoveryBlocked){toast('Connectez-vous au serveur avant de facturer','warning');return;}
  await queueCloudSync();if(window.hotelSyncPending)return;
- const {data,error}=await sb.rpc('facturer_reservation',{p_id:id,p_tva:Number(db.config.tva)});
+ const {data,error}=await callServerRPC('facturer_reservation',{p_id:id,p_tva:Number(db.config.tva)});
  if(error){toast('Facturation impossible : '+error.message,'danger');return;}
  try{await loadCloudState();renderReservations();renderFactures();viewFacture(data);}catch(error){toast('Facture créée ; rechargez les données : '+error.message,'warning');}
 }
 function editResa(id){openResaModal(id)}
 function deleteResa(id){
  if(!requireManager())return;
+ if(db.factures.some(f=>f.refResa===id)){toast('Cette réservation est facturée','warning');return;}
  confirmDialog('Supprimer cette réservation ?',()=>{
   const old=db.reservations.find(r=>r.id===id);
   db.reservations=db.reservations.filter(r=>r.id!==id);
@@ -836,6 +860,7 @@ function openRoomModal(id){
             <option value="true" ${escapeHtml(r&&r.eauChaude?'selected':'')}>Oui</option>
           </select>
         </div>
+        <div class="form-group"><label>Étage (0 = rez-de-chaussée)</label><input type="number" class="form-control" id="chEtage" required value="${escapeHtml(r?r.etage??0:0)}" min="-5" max="200"></div>
         <div class="form-group"><label>Capacité</label><input type="number" class="form-control" id="chCap" value="${escapeHtml(r?r.capacite:2)}" min="1"></div>
         <div class="form-group"><label>Prix / nuit (FCFA) *</label><input type="number" class="form-control" id="chPrix" required value="${escapeHtml(r?r.prix:25000)}" min="0"></div>
         <div class="form-group"><label>Statut</label>
@@ -860,12 +885,14 @@ function saveRoom(e,id){
     bloc:document.getElementById('chBloc').value,
     eauChaude:document.getElementById('chEauChaude').value==='true',
     climatisee:document.getElementById('chType').value.includes('Climatisée'),
-    etage:1,
+    etage:parseInt(document.getElementById('chEtage').value),
     capacite:parseInt(document.getElementById('chCap').value)||1,
     prix:parseFloat(document.getElementById('chPrix').value)||0,
     statut:document.getElementById('chStatut').value,
     equipements:document.getElementById('chEquip').value
   };
+  data.numero=data.numero.trim();
+  if(!data.numero||!Number.isFinite(data.prix)||data.prix<0||!Number.isInteger(data.etage)||data.capacite<1||db.chambres.some(c=>c.id!==id&&c.numero.trim().toLowerCase()===data.numero.toLowerCase())){toast('Numéro déjà utilisé ou caractéristiques invalides','warning');return;}
   if(id) Object.assign(db.chambres.find(x=>x.id===id),data);
   else db.chambres.push({id:uid('rm'),...data});
   saveDB();closeModal();renderRooms();toast('Enregistré');
@@ -1206,6 +1233,9 @@ function viewFacture(id){
   `);
   document.getElementById('modalBox').classList.add('lg');
 }
+function printableReport(id){
+ return DOMPurify.sanitize(document.getElementById(id)?.innerHTML||'',{FORBID_TAGS:['button','script','iframe','object','embed','input','select','textarea'],FORBID_ATTR:['onclick','onchange','onsubmit','oninput','srcdoc']});
+}
 function printInvoice(){
   const w = window.open('','_blank');
   const html = document.getElementById('invoicePrint').outerHTML;
@@ -1244,7 +1274,7 @@ async function payerFacture(id){
  await queueCloudSync();if(window.hotelSyncPending||recoveryBlocked){toast('Récupérez les modifications en attente avant d’encaisser','warning');return;}
  const key='soonre-payment:'+db.hotelId+':'+id;let operation;
  try{const old=JSON.parse(localStorage.getItem(key)||'null');operation=old?.montant===montant?old.operation:crypto.randomUUID();localStorage.setItem(key,JSON.stringify({operation,montant}));}catch{operation=crypto.randomUUID();}
- const{error}=await sb.rpc('encaisser_facture',{p_id:id,p_montant:montant,p_operation:operation});
+ const{error}=await callServerRPC('encaisser_facture',{p_id:id,p_montant:montant,p_operation:operation});
  if(error){toast('Paiement non confirmé : '+error.message+'. Réessayez avec le même montant.','danger');return;}
  localStorage.removeItem(key);
  try{await loadCloudState();renderFactures();renderCaisse();toast('Paiement confirmé par le serveur');}catch(error){toast('Paiement enregistré ; rechargez les données : '+error.message,'warning');}
@@ -1963,6 +1993,7 @@ function renderConfig(){
   });
 }
 function saveConfig(){
+  const rate=Number(document.getElementById('cfgTva').value);if(!Number.isFinite(rate)||rate<0||rate>100){toast('Taux TVA invalide','warning');return;}
   Object.assign(db.config, {
     nom:document.getElementById('cfgNom').value,
     raison:document.getElementById('cfgRaison').value,
@@ -1986,7 +2017,7 @@ async function renderUsers(){
   const el = document.getElementById('usersTable');
   if(!el) return;
   el.innerHTML = '<tr><td colspan="5">Chargement…</td></tr>';
-  const { data, error } = await sb.from('profiles').select('id,nom,email,role,actif').order('nom');
+  const { data, error } = await safeQuery(sb.from('profiles').select('id,nom,email,role,actif').order('nom'));
   if(error){ el.innerHTML = `<tr><td colspan="5">Impossible de charger la liste (${escapeHtml(error.message)})</td></tr>`; return; }
   el.innerHTML = data.map(u=>`
     <tr>
@@ -1994,7 +2025,7 @@ async function renderUsers(){
       <td><strong>${escapeHtml(u.nom)}</strong></td>
       <td><span class="badge badge-neutral">${escapeHtml(u.role)}</span></td>
       <td>${statutBadge(u.actif?'actif':'inactif')}</td>
-      <td><button class="btn btn-sm btn-ghost" onclick="reinitialiserMotDePasse('${escapeInline(u.id)}')">🔑 Réinitialiser</button></td>
+      <td>${canManageProfile(u)?`<button class="btn btn-sm btn-ghost" onclick="editUser('${escapeInline(u.id)}')">✎ Modifier</button>`:''}<button class="btn btn-sm btn-ghost" onclick="reinitialiserMotDePasse('${escapeInline(u.id)}')">🔑 Réinitialiser</button></td>
     </tr>
   `).join('') || '<tr><td colspan="5">Aucun compte pour l\'instant</td></tr>';
 }
@@ -2030,7 +2061,30 @@ async function saveUser(e){
   toast('Compte créé pour '+nom);
   renderUsers();
 }
-function editUser(){toast('La modification des profils nécessite le service administrateur sécurisé','warning');}
+function canManageProfile(user){
+ const rank=role=>({'Super Administrateur':4,'Directeur Général':3,'Gérant':2,'Accueil / Réception':1,'Ménage':1,'Maintenance':1}[role]||0);
+ return isManager()&&user.id!==db.currentUser.id&&rank(user.role)<rank(db.currentUser.role);
+}
+async function editUser(id){
+ if(!requireManager())return;
+ const {data:user,error}=await sb.from('profiles').select('id,nom,role,actif').eq('id',id).single();
+ if(error||!user||!canManageProfile(user)){toast('Gestion de ce compte non autorisée','warning');return;}
+ const roles=['Directeur Général','Gérant','Accueil / Réception','Ménage','Maintenance'].filter(role=>canManageProfile({id,role}));
+ openModal('Modifier le compte',`<form id="editUserForm" onsubmit="saveEditedUser(event,'${escapeInline(id)}')"><div class="form-group"><label>Nom complet</label><input id="editUserName" class="form-control" maxlength="200" required value="${escapeHtml(user.nom)}"></div><div class="form-group"><label>Rôle</label><select id="editUserRole" class="form-control">${roles.map(role=>`<option ${role===user.role?'selected':''}>${escapeHtml(role)}</option>`).join('')}</select></div><label><input type="checkbox" id="editUserActive" ${user.actif?'checked':''}> Compte actif</label></form>`,`<button class="btn btn-ghost" onclick="closeModal()">Annuler</button><button class="btn btn-primary" onclick="document.getElementById('editUserForm').requestSubmit()">Enregistrer</button>`);
+}
+async function saveEditedUser(event,id){
+ event.preventDefault();if(!requireManager())return;
+ const {error}=await callServerRPC('modifier_utilisateur',{p_id:id,p_nom:document.getElementById('editUserName').value.trim(),p_role:document.getElementById('editUserRole').value,p_actif:document.getElementById('editUserActive').checked});
+ if(error){toast('Compte non modifié : '+error.message,'danger');return;}closeModal();await renderUsers();toast('Compte mis à jour');
+}
+
+function exportSnapshot(){return Object.fromEntries(IMPORT_KEYS.filter(key=>Object.hasOwn(db,key)).map(key=>[key,structuredClone(db[key])]));}
+async function exportData(){
+ if(!requireManager())return;
+ await queueCloudSync();const data=exportSnapshot();
+ const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));a.download='soonre-sauvegarde-'+new Date().toISOString().slice(0,10)+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+ toast(window.hotelSyncPending?'Copie locale exportée : certaines modifications attendent la sauvegarde serveur':'Données métier exportées ; les comptes et mots de passe sont gérés séparément',window.hotelSyncPending?'warning':'success');
+}
 function importData(e){
   const file = e.target.files[0];
   if(!file) return;
@@ -2186,8 +2240,9 @@ function genererLoyerLoc(id){
   const l = db.locationsMagasin.find(x=>x.id===id);
   const m = db.magasins.find(x=>x.id===l.magasinId);
   const today = new Date().toISOString().slice(0,10);
+  const invoiceId='LOYER-'+id+'-'+today.slice(0,7);if(db.factures.some(f=>f.id===invoiceId)){toast('Le loyer de ce mois est déjà facturé','warning');return;}
   db.factures.push({
-    id:uid('fc'),
+    id:invoiceId,
     numero:'FAC-MAG-'+(5000+db.factures.filter(f=>f.type==='magasin').length),
     date:today,
     clientNom:l.locataire,
@@ -2340,7 +2395,8 @@ function saveMouvStock(e){
   const q = parseFloat(document.getElementById('mvQt').value)||0;
   const type = document.getElementById('mvType').value;
   const motif = document.getElementById('mvMotif').value;
-  if(type==='entree') s.quantite += q; else s.quantite = Math.max(0, s.quantite - q);
+  if(!s||!Number.isFinite(q)||q<=0||!['entree','sortie'].includes(type)||(type==='sortie'&&q>s.quantite)){toast('Quantité invalide ou stock insuffisant','warning');return;}
+  if(type==='entree')s.quantite+=q;else s.quantite-=q;
   db.mouvementsStock.push({id:uid('ms'),date:new Date().toISOString().slice(0,10),articleId:s.id,type,quantite:q,motif});
   saveDB();closeModal();renderStock();toast('Mouvement enregistré');
 }
@@ -2524,7 +2580,7 @@ function renderPaie(){
     return `<tr>
       <td><strong>${escapeHtml(x.numero)}</strong></td>
       <td>${escapeHtml(x.periode)}</td>
-      <td>${emp?emp.prenom+' '+emp.nom+' <br><small style="color:var(--muted)">'+emp.matricule+'</small>':escapeHtml('—')}</td>
+      <td>${emp?escapeHtml(emp.prenom)+' '+escapeHtml(emp.nom)+' <br><small style="color:var(--muted)">'+escapeHtml(emp.matricule)+'</small>':escapeHtml('—')}</td>
       <td>${escapeHtml(fmt(x.salaireBrut))}</td>
       <td style="color:var(--danger)">−${escapeHtml(fmt(retenues))}</td>
       <td style="font-weight:700;color:var(--success)">${escapeHtml(fmt(x.salaireNet))}</td>
@@ -2551,8 +2607,8 @@ function openPaieModal(id){
         <div class="form-group"><label>Date paiement</label><input type="date" class="form-control" id="pyDt" value="${escapeHtml(x?x.datePaiement:new Date().toISOString().slice(0,10))}"></div>
         <div class="form-group"><label>Salaire brut</label><input type="number" class="form-control" id="pyBr" value="${escapeHtml(x?x.salaireBrut:0)}" oninput="calcPaie()"></div>
         <div class="form-group"><label>Primes / heures sup.</label><input type="number" class="form-control" id="pyPr" value="${escapeHtml(x?x.primes:0)}" oninput="calcPaie()"></div>
-        <div class="form-group"><label>CNSS (5.5%)</label><input type="number" class="form-control" id="pyCn" value="${escapeHtml(x?x.cnss:0)}"></div>
-        <div class="form-group"><label>IRPP</label><input type="number" class="form-control" id="pyIr" value="${escapeHtml(x?x.irpp:0)}"></div>
+        <div class="form-group"><label>CNSS à retenir (montant validé)</label><input type="number" class="form-control" id="pyCn" min="0" oninput="calcPaie()" value="${escapeHtml(x?x.cnss:0)}"></div>
+        <div class="form-group"><label>IRPP</label><input type="number" class="form-control" id="pyIr" min="0" oninput="calcPaie()" value="${escapeHtml(x?x.irpp:0)}"></div>
         <div class="form-group"><label>Avances</label><input type="number" class="form-control" id="pyAv" value="${escapeHtml(x?x.avances||0:0)}" oninput="calcPaie()"></div>
         <div class="form-group"><label>Mode paiement</label>
           <select class="form-control" id="pyMd">
@@ -2582,13 +2638,12 @@ function autoRemplirSalaire(){
   }
 }
 function calcPaie(){
+  if(!document.getElementById('pyBr')||!document.getElementById('pyCn')||!document.getElementById('pyIr')||!document.getElementById('pyNet'))return;
   const br = parseFloat(document.getElementById('pyBr')?.value)||0;
   const pr = parseFloat(document.getElementById('pyPr')?.value)||0;
   const av = parseFloat(document.getElementById('pyAv')?.value)||0;
-  const cn = Math.round((br+pr)*0.055);
-  const ir = Math.round((br+pr)*0.03);
-  document.getElementById('pyCn').value = cn;
-  document.getElementById('pyIr').value = ir;
+  const cn=Number(document.getElementById('pyCn').value)||0;
+  const ir=Number(document.getElementById('pyIr').value)||0;
   const net = br+pr-cn-ir-av;
   document.getElementById('pyNet').textContent = fmt(net);
 }
@@ -2609,26 +2664,24 @@ function savePaie(e,id){
     salaireBrut:br, primes:pr, cnss:cn, irpp:ir, avances:av, salaireNet:net,
     mode:document.getElementById('pyMd').value, statut:'paye'
   };
-  if(id) Object.assign(db.paies.find(x=>x.id===id),data);
-  else {
-    data.id = uid('py');
-    data.numero = 'PAIE-'+per.replace('-','')+'-'+(emp?emp.matricule.slice(-4):'0000');
-    db.paies.push(data);
-    // caisse: sortie
-    db.caisse.push({id:uid('cs'),date:data.datePaiement,ref:data.numero,description:'Salaire '+emp.prenom+' '+emp.nom,type:'sortie',mode:data.mode,montant:net});
-  }
+  const previous=id?db.paies.find(x=>x.id===id):null;
+  if(!emp||!/^[0-9]{4}-[0-9]{2}$/.test(per)||[br,pr,cn,ir,av,net].some(n=>!Number.isFinite(n)||n<0)||db.paies.some(p=>p.id!==id&&p.personnelId===empId&&p.periode===per)){toast('Bulletin invalide ou déjà présent pour cette période','warning');return;}
+  if(previous?.statut==='paye'){toast('Un bulletin payé ne peut pas être modifié','warning');return;}
+  if(data.mode==='espece'&&!sessionActive()){toast('Ouvrez la caisse avant un paiement en espèces','warning');return;}
+  if(previous)Object.assign(previous,data);else{data.id=uid('py');data.numero='PAIE-'+per.replace('-','')+'-'+(emp.matricule||emp.id).slice(-4);db.paies.push(data);}
+  const payroll=previous||data;
+  db.caisse.push({id:uid('cs'),date:data.datePaiement,ref:payroll.numero,description:'Salaire '+emp.prenom+' '+emp.nom,type:'sortie',mode:data.mode,montant:net,sessionId:sessionActive()?.id||null});
   saveDB();closeModal();renderPaie();toast('Bulletin établi');
 }
 function genererPaieMassive(){
   const per = document.getElementById('paiePeriode').value;
-  confirmDialog('Générer les bulletins de paie pour tout le personnel ('+per+') ?',()=>{
+  confirmDialog('Préparer les brouillons de paie, à vérifier avant paiement ('+per+') ?',()=>{
     let count = 0;
     db.personnel.filter(e=>e.actif).forEach(emp=>{
       const exists = db.paies.find(p=>p.personnelId===emp.id && p.periode===per);
       if(exists) return;
       const br = emp.salaire;
-      const cn = Math.round(br*0.055);
-      const ir = Math.round(br*0.03);
+      const cn=0,ir=0;
       const net = br-cn-ir;
       db.paies.push({
         id:uid('py'),
@@ -2637,12 +2690,11 @@ function genererPaieMassive(){
         datePaiement:new Date().toISOString().slice(0,10),
         personnelId:emp.id,
         salaireBrut:br,primes:0,cnss:cn,irpp:ir,avances:0,salaireNet:net,
-        mode:'virement',statut:'paye'
+        mode:'virement',statut:'brouillon'
       });
-      db.caisse.push({id:uid('cs'),date:new Date().toISOString().slice(0,10),ref:'PAIE-'+emp.matricule,description:'Salaire '+emp.prenom+' '+emp.nom,type:'sortie',mode:'virement',montant:net});
       count++;
     });
-    saveDB();renderPaie();toast(count+' bulletin(s) généré(s)');
+    saveDB();renderPaie();toast(count+' brouillon(s) préparé(s), à vérifier avant paiement');
   });
 }
 function viewBulletin(id){imprimerBulletin(id)}
@@ -2652,7 +2704,7 @@ function imprimerBulletin(id){
   const c = db.config;
   const retenues = x.cnss + x.irpp + (x.avances||0);
   const w = window.open('','_blank','width=800,height=900');
-  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Bulletin ${escapeHtml(x.numero)}</title>
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Bulletin ${escapeHtml(x.numero)} ${x.statut==='brouillon'?'— BROUILLON':''}</title>
     <style>
       body{font-family:'Helvetica',sans-serif;padding:30px;color:#333;font-size:12px}
       h1{color:#5C3A1E;margin:0}
@@ -3103,10 +3155,7 @@ function genererEcrituresAuto(){
       db.ecritures.push({id:uid('ec'),date:p.datePaiement,journal:'PA',piece:p.numero,libelle:lib+' — Net',compte:'421000',debit:0,credit:p.salaireNet,auto:true});
       if(p.cnss>0) db.ecritures.push({id:uid('ec'),date:p.datePaiement,journal:'PA',piece:p.numero,libelle:lib+' — CNSS salariale',compte:'431000',debit:0,credit:p.cnss,auto:true});
       if(p.irpp>0) db.ecritures.push({id:uid('ec'),date:p.datePaiement,journal:'PA',piece:p.numero,libelle:lib+' — IRPP',compte:'447000',debit:0,credit:p.irpp,auto:true});
-      // Charges patronales estimation (CNSS employeur 16% brut)
-      const cnssEmp = Math.round((p.salaireBrut+(p.primes||0))*0.16);
-      db.ecritures.push({id:uid('ec'),date:p.datePaiement,journal:'PA',piece:p.numero,libelle:lib+' — Charges patronales',compte:'664000',debit:cnssEmp,credit:0,auto:true});
-      db.ecritures.push({id:uid('ec'),date:p.datePaiement,journal:'PA',piece:p.numero,libelle:lib+' — CNSS patronale',compte:'431000',debit:0,credit:cnssEmp,auto:true});
+      // Employer contributions require an explicitly validated amount; no estimated journal entries.
       p.auto_ecrit = true;
       count+=6;
     });
@@ -3520,17 +3569,8 @@ function switchRestoTab(t){
 }
 
 function initRestoPage(){
-  // Seed initial tables si vide
-  if(!db.tablesResto || !db.tablesResto.length){
-    db.tablesResto = [];
-    // Salle principale : 8 tables
-    for(let i=1;i<=8;i++) db.tablesResto.push({id:uid('tb'),numero:'T'+String(i).padStart(2,'0'),zone:'Salle principale',capacite:i%2===0?4:2,statut:'libre'});
-    // Terrasse : 4 tables
-    for(let i=1;i<=4;i++) db.tablesResto.push({id:uid('tb'),numero:'TR'+i,zone:'Terrasse',capacite:4,statut:'libre'});
-    // Salon VIP : 2 tables
-    for(let i=1;i<=2;i++) db.tablesResto.push({id:uid('tb'),numero:'VIP'+i,zone:'Salon VIP',capacite:6,statut:'libre'});
-    saveDB();
-  }
+  // Tables are configured by the hotel; opening a page must not create fictitious tables.
+  if(!db.tablesResto)db.tablesResto=[];
   if(!db.categoriesMenu || !db.categoriesMenu.length){
     db.categoriesMenu = CATEGORIES_DEFAUT.map(n=>({id:uid('ct'),nom:n,envoi:['Boisson chaude','Boisson fraîche','Bière','Vin','Cocktail'].includes(n)?'bar':'cuisine'}));
     saveDB();
@@ -3844,7 +3884,7 @@ function editCommande(id){ openCommandeModal(id); }
 
 function changerStatutCmd(id){
   const c = db.commandes.find(x=>x.id===id);
-  const flux = ['commandee','cuisine','prete','servie','paye'];
+  const flux = ['commandee','cuisine','prete','servie'];
   openModal('Statut de la commande '+c.numero, `
     <p>Statut actuel : ${statutCmdBadge(c.statut)}</p>
     <div style="display:flex;flex-direction:column;gap:8px">
@@ -3857,6 +3897,7 @@ function changerStatutCmd(id){
 
 function setStatutCmd(id, statut){
   const c = db.commandes.find(x=>x.id===id);
+  if(!c||c.paye>0||!['commandee','cuisine','prete','servie','annulee'].includes(statut)){toast('Utilisez l’encaissement pour clôturer une commande','warning');return;}
   c.statut = statut;
   if(statut==='annulee'){
     // Libérer table
@@ -3868,12 +3909,13 @@ function setStatutCmd(id, statut){
 }
 
 function payerCmd(id){
+  if(!sessionActive()){toast('Ouvrez la caisse avant d’encaisser','warning');return;}
   const c = db.commandes.find(x=>x.id===id);
   openModal('💰 Encaissement — '+c.numero, `
     <form id="payForm" onsubmit="finaliserPaiement(event,'${escapeInline(id)}')">
       <div style="background:var(--brown-dark);color:#fff;padding:14px;border-radius:8px;margin-bottom:14px;text-align:center">
         <div style="font-size:11px;letter-spacing:1px">MONTANT À ENCAISSER</div>
-        <div style="font-size:32px;font-weight:900;color:var(--gold)">${escapeHtml(fmt(c.total))}</div>
+        <div style="font-size:32px;font-weight:900;color:var(--gold)">${escapeHtml(fmt(c.total-c.paye))}</div>
       </div>
       <h4>Répartition des paiements</h4>
       <div id="paiementsLignes"></div>
@@ -3882,18 +3924,11 @@ function payerCmd(id){
         <div>Total encaissé : <strong id="payTotal">0 FCFA</strong></div>
         <div id="payReste" style="font-weight:700;font-size:16px"></div>
       </div>
-      ${c.typeService==='room_service' && c.chambreId ? `
-      <div style="background:#e3f2fd;padding:10px;border-radius:6px;margin-top:10px">
-        🛎 Room service — cette consommation peut être ajoutée à la facture de la chambre.
-        <label style="display:flex;align-items:center;gap:6px;margin-top:6px">
-          <input type="checkbox" id="payFactureChambre" checked> Ajouter à la note de la chambre
-        </label>
-      </div>` : ''}
     </form>
   `,`<button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
      <button class="btn btn-green" onclick="document.getElementById('payForm').requestSubmit()">✅ Valider paiement</button>`);
   window._paiements = [];
-  ajouterPaiementLigne(c.total, 'espece');
+  ajouterPaiementLigne(c.total-c.paye, 'espece');
 }
 
 function ajouterPaiementLigne(mt, mode){
@@ -3907,7 +3942,7 @@ function ajouterPaiementLigne(mt, mode){
       <option value="carte" ${escapeHtml(mode==='carte'?'selected':'')}>💳 Carte</option>
     </select>
     <input type="number" class="form-control" value="${escapeHtml(mt||0)}" oninput="window._paiements[${escapeInline(idx)}].montant=parseFloat(this.value)||0;majTotalPay()">
-    <button type="button" class="btn btn-sm btn-danger" onclick="window._paiements.splice(${escapeInline(idx)},1);this.parentElement.remove();majTotalPay()">×</button>
+    <button type="button" class="btn btn-sm btn-danger" onclick="window._paiements[${escapeInline(idx)}].montant=0;this.parentElement.remove();majTotalPay()">×</button>
   </div>`;
   document.getElementById('paiementsLignes').insertAdjacentHTML('beforeend', html);
   majTotalPay();
@@ -3919,9 +3954,9 @@ function majTotalPay(){
   document.getElementById('payTotal').textContent = fmt(total);
   const el = document.getElementById('payReste');
   if(!el || !c) return;
-  const diff = total - c.total;
+  const diff = total - (c.total-c.paye);
   if(diff===0){ el.textContent='✓ Exactement le montant dû'; el.style.color='var(--success)'; }
-  else if(diff>0){ el.textContent='Rendu monnaie : '+fmt(diff); el.style.color='var(--gold-dark)'; }
+  else if(diff>0){ el.textContent='Réduisez la répartition de '+fmt(diff); el.style.color='var(--gold-dark)'; }
   else { el.textContent='Manque : '+fmt(-diff); el.style.color='var(--danger)'; }
 }
 let _currentPayCmdId = null;
@@ -3931,49 +3966,18 @@ function _wrapPayerCmd(){
 }
 _wrapPayerCmd();
 
-function finaliserPaiement(e, id){
-  e.preventDefault();
-  const c = db.commandes.find(x=>x.id===id);
-  const total = window._paiements.reduce((s,p)=>s+p.montant, 0);
-  if(total < c.total){ toast('Montant insuffisant','warning'); return; }
-  const s = sessionActive();
-  // Créer entrées caisse pour chaque mode
-  window._paiements.forEach((p, i)=>{
-    if(p.montant<=0) return;
-    // Cap : ne pas dépasser le total dû (le rendu monnaie n'est pas une entrée)
-    const montantEffectif = Math.min(p.montant, c.total);
-    db.caisse.push({
-      id:uid('cs'),
-      date: new Date().toISOString().slice(0,10),
-      ref:'REST-'+c.numero+'-'+(i+1),
-      description:'Encaissement '+c.numero+(c.clientNom?' — '+c.clientNom:''),
-      type:'entree',
-      mode:p.mode,
-      montant: montantEffectif,
-      sessionId: s?s.id:null
-    });
-  });
-  c.statut = 'paye';
-  c.paye = c.total;
-  c.datePaiement = new Date().toISOString();
-  c.paiements = window._paiements.slice();
-  // Libérer la table
-  if(c.table){
-    const t = db.tablesResto.find(x=>x.numero===c.table);
-    if(t){ t.statut='libre'; delete t.commandeId; }
-  }
-  // Room service : facture chambre
-  const ajouterCh = document.getElementById('payFactureChambre');
-  if(ajouterCh && ajouterCh.checked && c.chambreId){
-    const resa = db.reservations.find(r=>r.chambreId===c.chambreId && r.statut==='checkin');
-    if(resa){
-      resa.consommations = resa.consommations || [];
-      resa.consommations.push({date:new Date().toISOString(),ref:c.numero,description:'Room service - '+c.lignes.map(l=>l.qte+'× '+l.nom).join(', '),montant:c.total});
-    }
-  }
-  saveDB(); closeModal(); renderCommandes();
-  toast('Paiement encaissé — Commande clôturée');
-  setTimeout(()=>{ if(confirm('Imprimer la facture ?')) imprimerFactureResto(id); }, 300);
+async function finaliserPaiement(e,id){
+ e.preventDefault();const c=db.commandes.find(x=>x.id===id);if(!c||c.statut==='paye'||c.statut==='annulee')return;
+ const payments=window._paiements.filter(p=>p.montant!==0).map(p=>({mode:p.mode,montant:Number(p.montant)}));
+ if(!payments.length||payments.length>8||payments.some(p=>!Number.isFinite(p.montant)||p.montant<=0||!['espece','mobile','carte','virement'].includes(p.mode))||Math.abs(payments.reduce((sum,p)=>sum+p.montant,0)-(c.total-c.paye))>0.001){toast('La répartition doit correspondre exactement au solde dû','warning');return;}
+ if(!cloudReady||!sessionActive()||recoveryBlocked){toast('Une connexion serveur et une caisse ouverte sont nécessaires','warning');return;}
+ await queueCloudSync();if(window.hotelSyncPending)return;
+ const key='soonre-restaurant-payment:'+db.hotelId+':'+id;let operation;
+ try{const old=JSON.parse(localStorage.getItem(key)||'null');operation=JSON.stringify(old?.payments)===JSON.stringify(payments)?old.operation:crypto.randomUUID();localStorage.setItem(key,JSON.stringify({operation,payments}));}catch{operation=crypto.randomUUID();}
+ const {error}=await callServerRPC('encaisser_commande',{p_id:id,p_paiements:payments,p_operation:operation});
+ if(error){toast('Paiement non confirmé : '+error.message+'. Réessayez avec la même répartition.','danger');return;}
+ localStorage.removeItem(key);closeModal();
+ try{await loadCloudState();renderCommandes();renderCaisse();toast('Paiement confirmé — commande clôturée');}catch(error){toast('Paiement enregistré ; rechargez les données : '+error.message,'warning');}
 }
 
 function viewCommande(id){
@@ -4415,6 +4419,7 @@ window.renderMenu = function(){
   }).join('') : '<tr><td colspan="8" class="empty">Aucun article</td></tr>';
 };
 
+function editMenu(id){openMenuModal(id);}
 function toggleDispoMenu(id){
   const m = db.menu.find(x=>x.id===id);
   m.disponible = !m.disponible;
@@ -4811,7 +4816,7 @@ function openDocModal(type, id){
           </div>
           ${type==='facture' ? `
           <div class="form-group"><label>Montant déjà payé</label>
-            <input type="number" class="form-control" id="docPaye" min="0" value="${escapeHtml(doc?doc.paye||0:0)}">
+            <input type="number" class="form-control" id="docPaye" min="0" readonly value="${escapeHtml(doc?doc.paye||0:0)}"><small>Les paiements se saisissent avec le bouton Encaisser.</small>
           </div>` : ''}
         </div>
         <div style="background:var(--brown-dark);color:#fff;padding:14px;border-radius:8px">
@@ -4908,6 +4913,8 @@ function saveDoc(e, type, id){
   const tvaMt = Math.round(baseHT*tvaPct/100);
   const total = baseHT + tvaMt;
 
+  if(!Number.isFinite(total)||total<0||!Number.isFinite(remPct)||remPct<0||remPct>100||!Number.isFinite(tvaPct)||tvaPct<0||tvaPct>100||_docLignes.some(l=>!Number.isFinite(l.qte)||l.qte<=0||!Number.isFinite(l.pu)||l.pu<0)){toast('Vérifiez les montants, quantités et taux','warning');return;}
+  if(type==='facture'&&id&&(db.factures.find(f=>f.id===id)?.paye>0||db.factures.find(f=>f.id===id)?.refResa)){toast('Une facture encaissée ne peut pas être modifiée','warning');return;}
   const cfg = DOC_TYPES[type];
   const col = type==='facture'?'factures':(type==='proforma'?'proformas':'devis');
   const paye = type==='facture' ? (parseFloat(document.getElementById('docPaye').value)||0) : 0;
@@ -5170,6 +5177,7 @@ function convertirEnFacture(id, sourceType){
   const col = sourceType==='proforma'?'proformas':'devis';
   const src = db[col].find(x=>x.id===id);
   if(!src){ toast('Document introuvable','warning'); return; }
+  if(src.factureId&&db.factures.some(f=>f.id===src.factureId)){toast('Ce document est déjà converti','warning');return;}
   confirmDialog(`Convertir cette ${DOC_TYPES[sourceType].label.toLowerCase()} en facture ? Une nouvelle facture sera créée à partir des mêmes lignes.`, ()=>{
     const facture = {
       id: uid('fac'),
@@ -5418,7 +5426,7 @@ function imprimerRapportResa(){
       <h2 style="color:#D4A017;margin-top:10px">RAPPORT DES RÉSERVATIONS</h2>
       <div>Période : ${escapeHtml(du || '—')} au ${escapeHtml(au || '—')}</div>
     </div>
-    ${escapeHtml(document.getElementById('resa-rapports').innerHTML.replace(/onclick="[^"]*"/g,'').replace(/<button[^>]*>[^<]*<\/button>/g,''))}
+    ${printableReport('resa-rapports')}
     <script>window.onload=function(){window.print()}<\/script>
     </body></html>`);
   w.document.close();
@@ -5605,7 +5613,7 @@ function imprimerRapportStock(){
       <h2 style="color:#D4A017;margin-top:10px">RAPPORT STOCK & APPROVISIONNEMENT</h2>
       <div>Période : ${escapeHtml(du||'—')} au ${escapeHtml(au||'—')}</div>
     </div>
-    ${escapeHtml(document.getElementById('stk-rapports').innerHTML.replace(/onclick="[^"]*"/g,'').replace(/<button[^>]*>[^<]*<\/button>/g,''))}
+    ${printableReport('stk-rapports')}
     <script>window.onload=function(){window.print()}<\/script>
     </body></html>`);
   w.document.close();
@@ -5771,7 +5779,7 @@ function imprimerRapportResto(){
       <h2 style="color:#D4A017;margin-top:10px">RAPPORT DÉTAILLÉ RESTAURANT</h2>
       <div>Période : ${escapeHtml(du||'—')} au ${escapeHtml(au||'—')}</div>
     </div>
-    ${escapeHtml(document.getElementById('resto-rapports').innerHTML.replace(/onclick="[^"]*"/g,'').replace(/<button[^>]*>[^<]*<\/button>/g,''))}
+    ${printableReport('resto-rapports')}
     <script>window.onload=function(){window.print()}<\/script>
     </body></html>`);
   w.document.close();
@@ -6017,8 +6025,10 @@ function confirmerPurgeAudit(){
 
   // -- AUTHENTIFICATION --
   const _handleLogin = handleLogin;
+  let loginBusy=false;
   window.handleLogin = async function(e){
-    e.preventDefault();
+    e.preventDefault();if(loginBusy)return;loginBusy=true;const button=document.querySelector('#loginScreen button[type=submit]');if(button)button.disabled=true;
+    try{
     const u = document.getElementById('loginUser').value.trim();
     const p = document.getElementById('loginPass').value;
 
@@ -6049,6 +6059,7 @@ function confirmerPurgeAudit(){
     document.getElementById('loginScreen').style.display='none';
     filtrerMenuParRole();
     showApp();
+    }catch(error){toast('Connexion impossible. Vérifiez le réseau et réessayez.','danger');}finally{loginBusy=false;if(button)button.disabled=false;}
   };
 
   // Logout awaits the pending write queue before ending the session.
@@ -6467,7 +6478,7 @@ function confirmerPurgeAudit(){
 
 // ============ MODAL ============
 function openModal(title, body, footer){
-  document.getElementById('modalTitle').innerHTML = title;
+  document.getElementById('modalTitle').textContent = title;
   document.getElementById('modalBody').innerHTML = body;
   document.getElementById('modalFooter').innerHTML = footer||'';
   document.getElementById('modalBox').classList.remove('lg','xl');
@@ -6553,6 +6564,7 @@ function persistRecovery(){
  localStorage.setItem(recoveryKey(),JSON.stringify({formatVersion:2,hotelId:db.hotelId,userId:db.currentUser.id,snapshot,baseline:[...cloudBaseline],versions:[...baselineVersions]}));
 }
 function clearRecoveryAction(){
+ updateSyncStatus();
  document.getElementById('pendingRecovery')?.remove();
  document.querySelectorAll('#app .content,#modalOverlay').forEach(el=>el.inert=false);
 }
@@ -6568,7 +6580,7 @@ async function retryRecovery(){
  }catch(error){toast(error.message,'danger');}
 }
 function showRecoveryAction(){
- recoveryBlocked=true;window.hotelSyncPending=true;
+ recoveryBlocked=true;window.hotelSyncPending=true;updateSyncStatus();
  document.querySelectorAll('#app .content,#modalOverlay').forEach(el=>el.inert=true);
  if(document.getElementById('pendingRecovery'))return;
  const banner=document.createElement('div');banner.id='pendingRecovery';banner.className='card';
@@ -6591,7 +6603,7 @@ function showRecoveryAction(){
 }
 function queueCloudSync(){
  if(!cloudReady||!db.currentUser?.actif||recoveryBlocked)return syncQueue;
- window.hotelSyncPending=true;
+ window.hotelSyncPending=true;updateSyncStatus();
  try{persistRecovery();}catch(error){toast('Copie de récupération indisponible : '+error.message,'warning');}
  if(syncScheduled)return syncQueue;
  syncScheduled=true;
@@ -6619,12 +6631,16 @@ function queueCloudSync(){
 function validateImport(data){
  if(!data||typeof data!=='object'||Array.isArray(data))throw new Error('Objet JSON attendu');
  for(const key of Object.keys(data))if(['__proto__','constructor','prototype','currentUser','hotelId','users'].includes(key))throw new Error('Champ interdit : '+key);
+ const inspect=value=>{if(!value||typeof value!=='object')return;for(const key of Object.keys(value)){if(['__proto__','constructor','prototype'].includes(key))throw new Error('Champ interdit : '+key);inspect(value[key]);}};inspect(data);
  for(const key of IMPORT_KEYS){if(!Object.hasOwn(data,key))continue;if(key==='config'){if(!data[key]||typeof data[key]!=='object'||Array.isArray(data[key]))throw new Error('Configuration invalide');continue;}
   if(!Array.isArray(data[key]))throw new Error('Collection invalide : '+key);
+  if(data[key].some(row=>!row||typeof row!=='object'||Array.isArray(row)))throw new Error('Enregistrements invalides : '+key);
+  if(CORE.some(x=>x[0]===key)&&new Set(data[key].map(row=>row?.id)).size!==data[key].length)throw new Error('Identifiants dupliqués : '+key);
   if(CORE.some(x=>x[0]===key))for(const row of data[key])if(!row||typeof row.id!=='string'||!/^[-A-Za-z0-9_:]+$/.test(row.id))throw new Error('Identifiant invalide');
  }
 }
-window.addEventListener('online',()=>queueCloudSync());
+window.addEventListener('online',()=>{updateSyncStatus();queueCloudSync();});
+window.addEventListener('offline',()=>updateSyncStatus());
 window.addEventListener('beforeunload',event=>{if(window.hotelSyncPending){event.preventDefault();event.returnValue='';}});
 // Never grant permissions merely by hiding a menu. These checks complement RLS.
 const originalShowPage=showPage;
@@ -6637,7 +6653,7 @@ showPage=function(name){
 const originalFilterMenu=filtrerMenuParRole;
 filtrerMenuParRole=function(){originalFilterMenu();if(!isManager())document.querySelectorAll('.nav-item').forEach(item=>{if(['personnel','pointage','paie','comptabilite','depenses','audit'].includes(item.dataset.page))item.style.display='none';});};
 // Financial movements and deleting records require a manager. Routine invoicing remains available at reception.
-for(const name of ['confirmerOuverture','confirmerFermeture','saveMouvement','deleteMouv','saveDepense','deleteDepense','deleteFacture','deleteRoom','deleteClient','deleteStock','deleteCommande','deleteMenu','saveConfig','importData','resetData','purgerAudit','confirmerPurgeAudit']){
+for(const name of ['saveStock','saveMouvStock','saveMenu','toggleDispoMenu','savePersonnel','savePointage','savePermanence','savePaie','genererPaieMassive','confirmerOuverture','confirmerFermeture','saveMouvement','deleteMouv','saveDepense','deleteDepense','deleteFacture','deleteRoom','deleteClient','deleteStock','deleteCommande','deleteMenu','saveConfig','importData','resetData','purgerAudit','confirmerPurgeAudit']){
  const original=window[name];if(typeof original==='function')window[name]=function(...args){if(!requireManager()){args[0]?.preventDefault?.();return;}return original(...args);};
 }
 const originalSaveRoom=saveRoom;
@@ -6649,7 +6665,7 @@ saveRoom=function(event,id){
  room.statut=statut;saveDB();closeModal();renderRooms();
 };
 async function loadServerAudit(){
- const{data,error}=await sb.from('audit_events').select('*').eq('hotel_id',db.hotelId).order('id',{ascending:false}).limit(1000);
+ const{data,error}=await safeQuery(sb.from('audit_events').select('*').eq('hotel_id',db.hotelId).order('id',{ascending:false}).limit(1000));
  if(error){toast('Journal serveur indisponible : '+error.message,'danger');return;}
  db.auditLog=data.reverse().map(e=>({id:'server_'+e.id,timestamp:e.event_at,userId:e.actor,userLogin:e.actor||'Système',userName:e.actor||'Système',userRole:'Serveur',module:e.table_name,action:({INSERT:'create',UPDATE:'update',DELETE:'delete'})[e.operation]||e.operation,entity:e.entity_id,description:e.operation+' '+e.table_name,details:{before:e.before_row,after:e.after_row}}));renderAudit();
 }
@@ -6683,7 +6699,7 @@ async function demarrerApp(){
   setTimeout(()=>{ try{ logAudit('Système','view','App','Démarrage de l\'application'); saveDB(); }catch(e){} }, 200);
   document.getElementById('loginScreen').style.display='flex';
 }
-demarrerApp();
+demarrerApp().catch(error=>{db.currentUser=null;db.hotelId=null;cloudReady=false;clearSensitiveState();document.getElementById('loginScreen').style.display='flex';toast('Connexion impossible. Vérifiez le réseau et réessayez.','danger');});
 
 
   if ('serviceWorker' in navigator) {
