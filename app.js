@@ -17,7 +17,7 @@ function loginToEmail(login){return login.includes('@')?login.toLowerCase():logi
 // -- Conversion JS (camelCase, dans db.*) <-> lignes Supabase (snake_case) --
 function chambreToDb(c){
   return { id:c.id, hotel_id:db.hotelId, numero:c.numero, type:c.type, bloc:c.bloc||null,
-    etage:c.etage||1, capacite:c.capacite||1, prix:c.prix||0, statut:c.statut,
+    etage:c.etage??1, capacite:c.capacite||1, prix:c.prix||0, statut:c.statut,
     climatisee:!!c.climatisee, eau_chaude:!!c.eauChaude, equipements:c.equipements||null };
 }
 function chambreFromDb(r){
@@ -107,9 +107,9 @@ function caisseFromDb(r){
 }
 function sessionCaisseToDb(s){
   return { id:s.id, hotel_id:db.hotelId, numero:s.numero||null, date_ouverture:s.dateOuverture||null,
-    ouverture_par:s.ouverturePar||null, fond_initial:s.fondInitial||null, note_ouverture:s.noteOuverture||null,
-    date_fermeture:s.dateFermeture||null, fermeture_par:s.fermeturePar||null, montant_compte:s.montantCompte||null,
-    montant_attendu:s.montantAttendu||null, ecart:s.ecart||null, note_fermeture:s.noteFermeture||null, statut:s.statut };
+    ouverture_par:s.ouverturePar||null, fond_initial:s.fondInitial??null, note_ouverture:s.noteOuverture||null,
+    date_fermeture:s.dateFermeture||null, fermeture_par:s.fermeturePar||null, montant_compte:s.montantCompte??null,
+    montant_attendu:s.montantAttendu??null, ecart:s.ecart??null, note_fermeture:s.noteFermeture||null, statut:s.statut };
 }
 function sessionCaisseFromDb(r){
   return { id:r.id, numero:r.numero, dateOuverture:r.date_ouverture, ouverturePar:r.ouverture_par,
@@ -739,7 +739,14 @@ function viewResa(id){
       <div><h5 style="color:var(--muted);font-size:11px;margin-bottom:4px">PAYÉ / RESTE</h5><div>${escapeHtml(fmt(r.paye))} / <span style="color:var(--danger)">${escapeHtml(fmt(r.montant-r.paye))}</span></div></div>
     </div>
     ${r.note?`<div style="margin-top:14px"><h5 style="color:var(--muted);font-size:11px">NOTES</h5><div>${escapeHtml(r.note)}</div></div>`:''}
-  `,`<button class="btn btn-ghost" onclick="closeModal()">Fermer</button>`);
+  `,`<button class="btn btn-ghost" onclick="closeModal()">Fermer</button>${r.statut!=='annulee'?`<button class="btn btn-gold" onclick="facturerSejour('${escapeInline(r.id)}')">Facturer le séjour</button>`:''}`);
+}
+async function facturerSejour(id){
+ if(!cloudReady||recoveryBlocked){toast('Connectez-vous au serveur avant de facturer','warning');return;}
+ await queueCloudSync();if(window.hotelSyncPending)return;
+ const {data,error}=await sb.rpc('facturer_reservation',{p_id:id,p_tva:Number(db.config.tva)});
+ if(error){toast('Facturation impossible : '+error.message,'danger');return;}
+ try{await loadCloudState();renderReservations();renderFactures();viewFacture(data);}catch(error){toast('Facture créée ; rechargez les données : '+error.message,'warning');}
 }
 function editResa(id){openResaModal(id)}
 function deleteResa(id){
@@ -1180,7 +1187,7 @@ function viewFacture(id){
       <div class="invoice-totals">
         <table>
           <tr><td>Total HT</td><td style="text-align:right">${escapeHtml(fmt(f.totalHT))}</td></tr>
-          <tr><td>TVA (${escapeHtml(db.config.tva)}%)</td><td style="text-align:right">${escapeHtml(fmt(f.tva))}</td></tr>
+          <tr><td>TVA (${escapeHtml(f.totalHT?Math.round(Number(f.tva)/Number(f.totalHT)*100):0)}%)</td><td style="text-align:right">${escapeHtml(fmt(f.tva))}</td></tr>
           <tr class="total-row"><td>TOTAL TTC</td><td style="text-align:right">${escapeHtml(fmt(f.total))}</td></tr>
           <tr><td>Payé</td><td style="text-align:right;color:var(--success)">${escapeHtml(fmt(f.paye))}</td></tr>
           <tr><td>Reste à payer</td><td style="text-align:right;color:var(--danger);font-weight:700">${escapeHtml(fmt(f.total-f.paye))}</td></tr>
@@ -1229,6 +1236,7 @@ function printInvoice(){
 }
 async function payerFacture(id){
  const f=db.factures.find(x=>x.id===id);if(!f)return;
+ if(!sessionActive()){toast('Ouvrez la caisse avant d’encaisser','warning');return;}
  const reste=f.total-f.paye;const value=prompt('Montant à encaisser (reste : '+fmt(reste)+')',reste);if(!value)return;
  const montant=Number(value);
  if(!Number.isFinite(montant)||montant<=0||montant>reste){toast('Le paiement doit être positif et ne pas dépasser le reste à payer','error');return;}
@@ -3707,7 +3715,7 @@ function openCommandeModal(id){
         <div style="background:var(--brown-dark);color:#fff;padding:14px;border-radius:8px">
           <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span>Sous-total HT</span><strong id="cmdSsHT">0</strong></div>
           <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span>Remise</span><strong id="cmdRem" style="color:#ffcccc">0</strong></div>
-          <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span>TVA (${escapeHtml(db.config.tva)}%)</span><strong id="cmdTVA">0</strong></div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span>TVA (${escapeHtml(f.totalHT?Math.round(Number(f.tva)/Number(f.totalHT)*100):0)}%)</span><strong id="cmdTVA">0</strong></div>
           <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span>Pourboire</span><strong id="cmdPour">0</strong></div>
           <hr style="border-color:#8B5A2B;margin:8px 0">
           <div style="display:flex;justify-content:space-between;font-size:20px"><span>TOTAL</span><strong id="cmdTotal" style="color:var(--gold)">0 FCFA</strong></div>
