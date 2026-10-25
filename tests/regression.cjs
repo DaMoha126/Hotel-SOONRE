@@ -41,6 +41,17 @@ const extraChecks=await dom.window.eval(`(async()=>{
  saveDepense({preventDefault(){}},'expense-test');check(db.caisse.length===expensesBefore+1,'Repeated expense confirmation creates no duplicate cash movement');deleteDep('expense-test');check(db.depenses.length===1,'Preserves paid expense history');
  closeModal();cloudReady=false;return passed;
 })()`);console.log(extraChecks.map(x=>'PASS '+x).join('\n'));
+const captureRegression=await dom.window.eval(`(()=>{
+ const passed=[];const check=(ok,name)=>{if(!ok)throw Error(name);passed.push(name);};
+ const body=document.createElement('tbody');body.innerHTML='<tr><td>Value</td><td><img src=x onerror="window.captureAttack=1"><a href="javascript:alert(1)">Link</a><script>window.captureAttack=1</script></td></tr>';
+ check(body.rows.length===1&&body.rows[0].cells.length===2&&body.rows[0].cells[0].textContent==='Value','Preserves table rows and cells during HTML sanitization');
+ check(!body.querySelector('script')&&!body.querySelector('[onerror]')&&!body.querySelector('a').hasAttribute('href')&&!window.captureAttack,'Sanitizes malicious HTML inside preserved table cells');
+ const row=document.createElement('tr');row.innerHTML='<td>A</td><td>B</td>';check(row.cells.length===2,'Preserves cell fragments in row context');
+ db.currentUser={id:'u',nom:'Direction',role:'Directeur Général',actif:true};db.config.tva=18;db.menu=[];db.tablesResto=[];db.personnel=[];db.chambres=[];db.commandes=[{id:'capture-command',numero:'TEST',lignes:[{nom:'Article',qte:1,pu:1180,envoi:'cuisine'}],statut:'commandee',remisePct:0,pourboire:0}];
+ openCommandeModal();check(!!document.getElementById('cmdForm'),'Opens a new restaurant order without an undefined invoice variable');
+ openCommandeModal('capture-command');refreshCmdLignes();check(document.getElementById('cmdLignesBody').rows.length===1&&document.getElementById('cmdTVA').textContent===fmt(180),'Edits an order and renders its configured tax and article row');closeModal();
+ return passed;
+})()`);console.log(captureRegression.map(x=>'PASS '+x).join('\n'));
 const pages=await dom.window.eval(`(async()=>{
  cloudReady=false;seedData();db.currentUser={id:'u',nom:'Direction',role:'Directeur Général',actif:true};
  sb.from=()=>{const q={select:()=>q,eq:()=>q,order:()=>q,limit:()=>q,then:resolve=>Promise.resolve({data:[],error:null}).then(resolve)};return q;};
