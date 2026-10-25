@@ -3753,7 +3753,7 @@ function openCommandeModal(id){
         <div style="background:var(--brown-dark);color:#fff;padding:14px;border-radius:8px">
           <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span>Sous-total HT</span><strong id="cmdSsHT">0</strong></div>
           <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span>Remise</span><strong id="cmdRem" style="color:#ffcccc">0</strong></div>
-          <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span>TVA (${escapeHtml(f.totalHT?Math.round(Number(f.tva)/Number(f.totalHT)*100):0)}%)</span><strong id="cmdTVA">0</strong></div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span>TVA (${escapeHtml(db.config.tva)}%)</span><strong id="cmdTVA">0</strong></div>
           <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span>Pourboire</span><strong id="cmdPour">0</strong></div>
           <hr style="border-color:#8B5A2B;margin:8px 0">
           <div style="display:flex;justify-content:space-between;font-size:20px"><span>TOTAL</span><strong id="cmdTotal" style="color:var(--gold)">0 FCFA</strong></div>
@@ -6673,8 +6673,11 @@ async function loadServerAudit(){
 if(!window.DOMPurify)throw new Error('Protection HTML indisponible');
 const innerHtmlDescriptor=Object.getOwnPropertyDescriptor(Element.prototype,'innerHTML');
 Object.defineProperty(Element.prototype,'innerHTML',{...innerHtmlDescriptor,set(value){
- const safe=DOMPurify.sanitize(String(value),{ADD_ATTR:['onclick','onchange','onsubmit','oninput'],FORBID_TAGS:['script','iframe','object','embed','svg','math'],FORBID_ATTR:['srcdoc'],ALLOW_DATA_ATTR:true});
- innerHtmlDescriptor.set.call(this,safe);
+ // Parse in the destination's HTML context so table rows/cells remain intact.
+ const container=document.createElement(this.localName);
+ innerHtmlDescriptor.set.call(container,String(value));
+ DOMPurify.sanitize(container,{IN_PLACE:true,ADD_ATTR:['onclick','onchange','onsubmit','oninput'],FORBID_TAGS:['script','iframe','object','embed','svg','math'],FORBID_ATTR:['srcdoc'],ALLOW_DATA_ATTR:true});
+ innerHtmlDescriptor.set.call(this,innerHtmlDescriptor.get.call(container));
 }});
 
 // ============ INIT ============
