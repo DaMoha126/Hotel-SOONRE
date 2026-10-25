@@ -71,6 +71,7 @@ const syncChecks=await dom.window.eval(`(async()=>{
  const saved=JSON.parse(localStorage.getItem(recoveryKey()));
  check(saved.formatVersion===2&&saved.snapshot.clients[0].id==='new'&&!saved.snapshot.currentUser,'Stores recovery without session identity');
  check(recoveryBlocked&&document.getElementById('pendingRecovery'),'Blocks editing while recovery awaits a choice');
+ check(document.getElementById('pendingRecovery').parentElement.classList.contains('main'),'Places recovery controls in the visible main column outside blocked content');
  db.clients=[];cloudBaseline.clear();baselineVersions.clear();
  sb.rpc=async(name,args)=>{sent.push(args.p_changes);return {data:args.p_changes.map(r=>({table:r.table,id:r.id,deleted:!!r.delete,version:1})),error:null};};
  await retryRecovery();

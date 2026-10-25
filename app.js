@@ -6598,7 +6598,8 @@ function showRecoveryAction(){
   try{await loadCloudState({preserveLocalModules:false});localStorage.removeItem(key);recoveryBlocked=false;window.hotelSyncPending=false;clearRecoveryAction();renderAll();}
   catch(error){toast('Rechargement impossible : '+error.message,'danger');}
  });
- document.getElementById('app').prepend(banner);
+ banner.style.margin='16px 24px 0';
+ document.querySelector('#app .topbar').after(banner);
 }
 function queueCloudSync(){
  if(!cloudReady||!db.currentUser?.actif||recoveryBlocked)return syncQueue;
