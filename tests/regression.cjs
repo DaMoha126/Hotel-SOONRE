@@ -60,6 +60,26 @@ const bookingChecks=await dom.window.eval(`(()=>{
  document.getElementById('rStatut').value='confirmee';db.chambres[0].statut='maintenance';saveResa({preventDefault(){}},'');check(db.reservations.length===0,'Booking rejects a room under maintenance');
  db.reservations=[{id:'guard-resa',clientId:'guard-client',chambreId:'guard-room',statut:'confirmee',arrivee:'2026-11-01',depart:'2026-11-02',montant:100,paye:0}];checkinResa('guard-resa');check(db.reservations[0].statut==='confirmee','Check-in rejects maintenance room');closeModal();return passed;
 })()`);console.log(bookingChecks.map(x=>'PASS '+x).join('\n'));
+const hotelChecks=await dom.window.eval(`(async()=>{
+ const passed=[],check=(ok,name)=>{if(!ok)throw Error(name);passed.push(name);};
+ const oldQueue=queueCloudSync;queueCloudSync=async()=>{};
+ try{
+ db.hotelId='11111111-1111-4111-8111-111111111111';db.currentUser={id:'hotel-admin',nom:'Admin',role:'Gérant',actif:true};
+ mountHotelSelector([{id:db.hotelId,nom:'Original'}],db.hotelId);openHotelModal();check(!document.getElementById('addHotelButton')&&!document.getElementById('hotelForm'),'Managers cannot open hotel creation');
+ db.currentUser.role='Super Administrateur';mountHotelSelector([{id:db.hotelId,nom:'Original'}],db.hotelId);check(!!document.getElementById('addHotelButton'),'Super administrator sees hotel creation');openHotelModal();
+ let calls=0;sb.rpc=async()=>{calls++;return {error:{message:'Refused'}};};cloudReady=true;recoveryBlocked=false;window.hotelSyncPending=false;
+ document.getElementById('hotelName').value='   ';document.getElementById('hotelCity').value='Ville';await saveHotel({preventDefault(){}});check(calls===0,'Rejects blank hotel name before sending');
+ document.getElementById('hotelName').value='Test hotel';cloudReady=false;await saveHotel({preventDefault(){}});check(calls===0,'Hotel creation requires server connection');
+ cloudReady=true;let resolveRpc;sb.rpc=async(name,args)=>{calls++;check(name==='creer_hotel'&&args.p_nom==='Test hotel'&&args.p_ville==='Ville','Sends hotel fields to atomic server operation');return new Promise(resolve=>resolveRpc=resolve);};
+ const first=saveHotel({preventDefault(){}});await new Promise(r=>setTimeout(r,0));await saveHotel({preventDefault(){}});check(calls===1&&document.getElementById('saveHotelButton').disabled,'Prevents double submission while hotel creation is pending');
+ const newId='33333333-3333-4333-8333-333333333333';resolveRpc({data:{id:newId,nom:'<img src=x onerror=alert(1)>',ville:'Ville',created:true},error:null});await first;
+ check(document.querySelectorAll('#activeHotel option').length===2&&!document.getElementById('activeHotel').querySelector('img')&&db.hotelId==='11111111-1111-4111-8111-111111111111','Lists new hotel as plain text without changing current hotel data');
+ openHotelModal();document.getElementById('hotelName').value='Test hotel';document.getElementById('hotelCity').value='Ville';sb.rpc=async()=>({error:{message:'Network interruption'}});await saveHotel({preventDefault(){}});check(document.getElementById('hotelForm')&&document.getElementById('hotelName').value==='Test hotel'&&!document.getElementById('saveHotelButton').disabled,'Keeps hotel form available for retry after network failure');
+ sb.rpc=async()=>({data:{id:newId,nom:'Existing hotel',created:false},error:null});await saveHotel({preventDefault(){}});check(document.querySelectorAll('#activeHotel option').length===2,'Idempotent retry does not duplicate hotel selector options');
+ db.currentUser.actif=false;mountHotelSelector([],db.hotelId);check(!document.getElementById('hotelControls'),'Inactive administrator cannot keep hotel controls');
+ }finally{queueCloudSync=oldQueue;cloudReady=false;closeModal();}
+ return passed;
+})()`);console.log(hotelChecks.map(x=>'PASS '+x).join('\n'));
 const pages=await dom.window.eval(`(async()=>{
  cloudReady=false;seedData();db.currentUser={id:'u',nom:'Direction',role:'Directeur Général',actif:true};
  sb.from=()=>{const q={select:()=>q,eq:()=>q,order:()=>q,limit:()=>q,then:resolve=>Promise.resolve({data:[],error:null}).then(resolve)};return q;};
