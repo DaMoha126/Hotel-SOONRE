@@ -6723,11 +6723,54 @@ demarrerApp().catch(error=>{db.currentUser=null;db.hotelId=null;cloudReady=false
     window.addEventListener('load', () => navigator.serviceWorker.register('./service-worker.js'));
   }
 
+let availableHotels=[],hotelCreationBusy=false;
+function canCreateHotel(){return db.currentUser?.actif===true&&db.currentUser.role==='Super Administrateur';}
 function mountHotelSelector(hotels,selected){
+ if(!canCreateHotel()){document.getElementById('hotelControls')?.remove();return;}
+ availableHotels=hotels.map(h=>({id:h.id,nom:h.nom})).sort((a,b)=>a.nom.localeCompare(b.nom,'fr'));
+ let controls=document.getElementById('hotelControls');
+ if(!controls){controls=document.createElement('div');controls.id='hotelControls';Object.assign(controls.style,{display:'flex',flexWrap:'wrap',gap:'8px',alignItems:'center',maxWidth:'100%'});document.querySelector('.topbar').append(controls);}
  let select=document.getElementById('activeHotel');
- if(!select){select=document.createElement('select');select.id='activeHotel';select.className='form-control';select.setAttribute('aria-label','Hôtel actif');document.querySelector('.topbar').append(select);}
- select.replaceChildren(...hotels.map(h=>{const option=document.createElement('option');option.value=h.id;option.textContent=h.nom;return option;}));select.value=selected;
+ if(!select){select=document.createElement('select');select.id='activeHotel';select.className='form-control';select.setAttribute('aria-label','Hôtel actif');Object.assign(select.style,{width:'auto',maxWidth:'100%',flex:'1 1 180px'});}
+ controls.prepend(select);
+ select.replaceChildren(...availableHotels.map(h=>{const option=document.createElement('option');option.value=h.id;option.textContent=h.nom;return option;}));select.value=selected;
+ let add=document.getElementById('addHotelButton');
+ if(!add){add=document.createElement('button');add.id='addHotelButton';add.type='button';add.className='btn btn-primary';add.textContent='+ Ajouter un hôtel';add.onclick=openHotelModal;controls.append(add);}add.disabled=hotelCreationBusy;
  select.onchange=async()=>{const old=db.hotelId;await queueCloudSync();if(window.hotelSyncPending||recoveryBlocked){select.value=old;toast('Terminez ou récupérez la sauvegarde avant de changer d’hôtel','warning');return;}
  try{cloudReady=false;db.hotelId=select.value;localStorage.setItem('soonre-hotel:'+db.currentUser.id,db.hotelId);await loadCloudState();showApp();}catch(error){db.hotelId=old;select.value=old;toast(error.message,'danger');}
  };
+}
+function openHotelModal(){
+ if(!canCreateHotel()){toast('Création réservée au Super Administrateur','warning');return;}
+ if(hotelCreationBusy)return;
+ openModal('Ajouter un hôtel',`
+  <form id="hotelForm" onsubmit="saveHotel(event)">
+   <div class="form-grid">
+    <div class="form-group full"><label>Nom de l’hôtel *</label><input id="hotelName" class="form-control" required maxlength="120" autocomplete="organization"></div>
+    <div class="form-group full"><label>Ville *</label><input id="hotelCity" class="form-control" required maxlength="80" autocomplete="address-level2"></div>
+   </div>
+   <p style="margin-top:12px;color:var(--muted)">Après la création, sélectionnez l’hôtel en haut de l’écran, puis complétez ses coordonnées et ses taux dans Paramètres. Ajoutez ensuite ses chambres et ses tarifs dans Chambres.</p>
+  </form>`,
+  `<button class="btn btn-ghost" onclick="closeModal()">Annuler</button><button id="saveHotelButton" class="btn btn-primary" onclick="document.getElementById('hotelForm').requestSubmit()">Créer l’hôtel</button>`);
+}
+async function saveHotel(event){
+ event.preventDefault();
+ if(!canCreateHotel()){toast('Création réservée au Super Administrateur','warning');return;}
+ if(hotelCreationBusy)return;
+ const form=document.getElementById('hotelForm');if(!form)return;
+ const nom=document.getElementById('hotelName').value.trim(),ville=document.getElementById('hotelCity').value.trim();
+ if(!nom||nom.length>120||!ville||ville.length>80){toast('Renseignez un nom et une ville valides','warning');return;}
+ if(!cloudReady||recoveryBlocked){toast('Connectez-vous et récupérez les sauvegardes en attente avant de créer un hôtel','warning');return;}
+ hotelCreationBusy=true;
+ const button=document.getElementById('saveHotelButton');button.disabled=true;button.textContent='Création en cours…';document.getElementById('addHotelButton')?.setAttribute('disabled','');
+ try{
+  await queueCloudSync();if(window.hotelSyncPending||recoveryBlocked){toast('Terminez la sauvegarde avant de créer un hôtel','warning');return;}
+  const {data,error}=await callServerRPC('creer_hotel',{p_nom:nom,p_ville:ville});
+  if(error){toast('Création non confirmée : '+error.message+'. Vous pouvez réessayer avec le même nom et la même ville.','danger');return;}
+  if(!data?.id||!data.nom)throw new Error('Réponse du serveur incomplète');
+  const hotels=availableHotels.filter(h=>h.id!==data.id);hotels.push({id:data.id,nom:data.nom});mountHotelSelector(hotels,db.hotelId);
+  if(form.isConnected)closeModal();
+  toast((data.created?'Hôtel créé. ':'Cet hôtel existe déjà. ')+'Sélectionnez-le dans la liste Hôtel actif.');
+ }catch(error){toast('Création non confirmée : '+error.message+'. Réessayez avec les mêmes informations.','danger');}
+ finally{hotelCreationBusy=false;if(button.isConnected){button.disabled=false;button.textContent='Créer l’hôtel';}const add=document.getElementById('addHotelButton');if(add)add.disabled=false;}
 }
