@@ -435,7 +435,7 @@ function renderDashboard(){
   db.reservations.filter(r=>r.arrivee===todayStr).forEach(r=>{
     const c = db.clients.find(x=>x.id===r.clientId);
     const ch = db.chambres.find(x=>x.id===r.chambreId);
-    mv.push({type:'Arrivée',client:c?c.prenom+' '+c.nom:'-',chambre:ch?ch.numero:'-',heure:'14:00',statut:r.statut});
+    mv.push({type:'Arrivée',client:c?c.prenom+' '+c.nom:'-',chambre:ch?ch.numero:'-',heure:'Non renseignée',statut:r.statut});
   });
   db.reservations.filter(r=>r.depart===todayStr).forEach(r=>{
     const c = db.clients.find(x=>x.id===r.clientId);
@@ -630,11 +630,11 @@ function renderReservations(){
       <td>${escapeHtml(fmt(r.paye))}</td>
       <td>${statutBadge(r.statut)}</td>
       <td>
-        <button class="btn btn-sm btn-ghost" onclick="viewResa('${escapeInline(r.id)}')">👁</button>
-        <button class="btn btn-sm btn-ghost" onclick="editResa('${escapeInline(r.id)}')">✎</button>
+        <button class="btn btn-sm btn-ghost" onclick="viewResa('${escapeInline(r.id)}')" aria-label="Voir les détails" title="Voir les détails">👁</button>
+        <button class="btn btn-sm btn-ghost" onclick="editResa('${escapeInline(r.id)}')" aria-label="Modifier" title="Modifier">✎</button>
         ${r.statut==='confirmee'?`<button class="btn btn-sm btn-green" onclick="checkinResa('${escapeInline(r.id)}')">Check-in</button>`:''}
         ${r.statut==='checkin'?`<button class="btn btn-sm btn-gold" onclick="checkoutResa('${escapeInline(r.id)}')">Check-out</button>`:''}
-        <button class="btn btn-sm btn-danger" onclick="deleteResa('${escapeInline(r.id)}')">×</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteResa('${escapeInline(r.id)}')" aria-label="Supprimer" title="Supprimer">×</button>
       </td>
     </tr>`;
   }).join('') : `<tr><td colspan="10" class="empty">Aucune réservation</td></tr>`;
@@ -677,12 +677,13 @@ function openResaModal(id){
         </div>
         <div class="form-group">
           <label>Statut</label>
-          <select class="form-control" id="rStatut">
+          <select class="form-control" id="rStatut" ${r&&['checkin','checkout'].includes(r.statut)?'disabled':''}>
             <option value="confirmee" ${escapeHtml(r&&r.statut==='confirmee'?'selected':'')}>Confirmée</option>
-            <option value="checkin" ${escapeHtml(r&&r.statut==='checkin'?'selected':'')}>Check-in</option>
-            <option value="checkout" ${escapeHtml(r&&r.statut==='checkout'?'selected':'')}>Check-out</option>
+            ${r&&r.statut==='checkin'?'<option value="checkin" selected>Check-in</option>':''}
+            ${r&&r.statut==='checkout'?'<option value="checkout" selected>Check-out</option>':''}
             <option value="annulee" ${escapeHtml(r&&r.statut==='annulee'?'selected':'')}>Annulée</option>
           </select>
+          <small>Utilisez les boutons Check-in et Check-out dans la liste pour enregistrer les mouvements du client.</small>
         </div>
         <div class="form-group full">
           <label>Notes</label>
@@ -700,9 +701,8 @@ function calcResaTotal(){
   const prix = parseFloat(chSel.options[chSel.selectedIndex]?.dataset.prix||0);
   const a = document.getElementById('rArrivee').value;
   const d = document.getElementById('rDepart').value;
-  if(!a||!d||!prix) return;
   const nuits = Math.round((new Date(d)-new Date(a))/86400000);
-  if(nuits>0) document.getElementById('rMontant').value = nuits*prix;
+  document.getElementById('rMontant').value = a&&d&&Number.isFinite(prix)&&prix>=0&&nuits>0 ? nuits*prix : 0;
 }
 function saveResa(e,id){
   e.preventDefault();
@@ -721,6 +721,10 @@ function saveResa(e,id){
   if(!Number.isFinite(montant)||!Number.isFinite(paye)||montant<0||paye<0||paye>montant){toast('Montants invalides','error');return;}
   if(['confirmee','checkin'].includes(statut) && db.reservations.some(r=>r.id!==id&&r.chambreId===chambreId&&['confirmee','checkin'].includes(r.statut)&&r.arrivee<depart&&r.depart>arrivee)){toast('Cette chambre est déjà réservée sur ces dates','error');return;}
   const existing=id?db.reservations.find(r=>r.id===id):null;
+  if(id&&!existing){toast('Réservation introuvable','error');return;}
+  if(!['confirmee','annulee','checkin','checkout'].includes(statut)||(['checkin','checkout'].includes(statut)&&existing?.statut!==statut)||(existing&&['checkin','checkout'].includes(existing.statut)&&statut!==existing.statut)){toast('Utilisez les actions Check-in et Check-out de la réservation','warning');return;}
+  if(['confirmee','checkin'].includes(statut)&&chTarif.statut==='maintenance'&&(!existing||existing.chambreId!==chambreId||existing.statut!==statut)){toast('Cette chambre est en maintenance','error');return;}
+  if(statut==='checkin'&&db.reservations.some(r=>r.id!==id&&r.chambreId===chambreId&&r.statut==='checkin')){toast('Chambre déjà occupée','error');return;}
   if(paye!==(existing?.paye||0)){toast('Utilisez la facture pour enregistrer un paiement','warning');return;}
   if(existing&&db.factures.some(f=>f.refResa===id)&&(['clientId','chambreId','arrivee','depart','montant'].some(k=>existing[k]!==({clientId,chambreId,arrivee,depart,montant})[k])||statut==='annulee')){toast('Séjour facturé : dates, chambre et montant verrouillés','warning');return;}
   const oldRoom=id?db.reservations.find(r=>r.id===id)?.chambreId:null;
@@ -785,6 +789,8 @@ function deleteResa(id){
 function checkinResa(id){
  const r=db.reservations.find(x=>x.id===id);
  if(!r||r.statut!=='confirmee')return;
+ const chambre=db.chambres.find(c=>c.id===r.chambreId);
+ if(!chambre||chambre.statut==='maintenance'){toast('Chambre indisponible : vérifiez la maintenance','error');return;}
  if(db.reservations.some(x=>x.id!==id&&x.chambreId===r.chambreId&&x.statut==='checkin')){toast('Chambre déjà occupée','error');return;}
  r.statut='checkin';refreshRoomStatus(r.chambreId);saveDB();renderReservations();toast('Check-in enregistré');
 }
@@ -831,8 +837,8 @@ function renderRooms(){
         <td>${escapeHtml(c.capacite)} pers.</td><td>${escapeHtml(fmt(c.prix))}</td>
         <td>${statutBadge(c.statut)}</td>
         <td>
-          <button class="btn btn-sm btn-ghost" onclick="editRoom('${escapeInline(c.id)}')">✎</button>
-          <button class="btn btn-sm btn-danger" onclick="deleteRoom('${escapeInline(c.id)}')">×</button>
+          <button class="btn btn-sm btn-ghost" onclick="editRoom('${escapeInline(c.id)}')" aria-label="Modifier" title="Modifier">✎</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteRoom('${escapeInline(c.id)}')" aria-label="Supprimer" title="Supprimer">×</button>
         </td>
       </tr>
     `).join('') : `<tr><td colspan="7" class="empty">Aucune chambre</td></tr>`;
@@ -943,8 +949,8 @@ function renderClients(){
       <td>${escapeHtml(c.tel)}</td><td>${escapeHtml(c.email)}</td><td>${escapeHtml(c.ville||'-')}</td>
       <td>${escapeHtml(sejours)}</td><td>${escapeHtml(fmt(total))}</td>
       <td>
-        <button class="btn btn-sm btn-ghost" onclick="editClient('${escapeInline(c.id)}')">✎</button>
-        <button class="btn btn-sm btn-danger" onclick="deleteClient('${escapeInline(c.id)}')">×</button>
+        <button class="btn btn-sm btn-ghost" onclick="editClient('${escapeInline(c.id)}')" aria-label="Modifier" title="Modifier">✎</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteClient('${escapeInline(c.id)}')" aria-label="Supprimer" title="Supprimer">×</button>
       </td>
     </tr>`;
   }).join('') : `<tr><td colspan="8" class="empty">Aucun client</td></tr>`;
@@ -1024,8 +1030,8 @@ function renderSalles(){
       <td>${escapeHtml(s.equipements)}</td>
       <td>${escapeHtml(fmt(s.tarif))}</td>
       <td>
-        <button class="btn btn-sm btn-ghost" onclick="editSalle('${escapeInline(s.id)}')">✎</button>
-        <button class="btn btn-sm btn-danger" onclick="deleteSalle('${escapeInline(s.id)}')">×</button>
+        <button class="btn btn-sm btn-ghost" onclick="editSalle('${escapeInline(s.id)}')" aria-label="Modifier" title="Modifier">✎</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteSalle('${escapeInline(s.id)}')" aria-label="Supprimer" title="Supprimer">×</button>
       </td>
     </tr>
   `).join('') : `<tr><td colspan="5" class="empty">Aucune salle</td></tr>`;
@@ -1078,8 +1084,8 @@ function renderEvenements(){
       <td>${escapeHtml(fmt(e.montant))}</td>
       <td>${statutBadge(e.statut)}</td>
       <td>
-        <button class="btn btn-sm btn-ghost" onclick="editEvt('${escapeInline(e.id)}')">✎</button>
-        <button class="btn btn-sm btn-danger" onclick="deleteEvt('${escapeInline(e.id)}')">×</button>
+        <button class="btn btn-sm btn-ghost" onclick="editEvt('${escapeInline(e.id)}')" aria-label="Modifier" title="Modifier">✎</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteEvt('${escapeInline(e.id)}')" aria-label="Supprimer" title="Supprimer">×</button>
       </td>
     </tr>`;
   }).join('') : `<tr><td colspan="9" class="empty">Aucun événement</td></tr>`;
@@ -1165,9 +1171,9 @@ function renderFactures(){
       <td style="color:var(--danger);font-weight:600">${escapeHtml(fmt(f.total-f.paye))}</td>
       <td>${statutBadge(f.statut)}</td>
       <td>
-        <button class="btn btn-sm btn-ghost" onclick="viewFacture('${escapeInline(f.id)}')">👁</button>
+        <button class="btn btn-sm btn-ghost" onclick="viewFacture('${escapeInline(f.id)}')" aria-label="Voir les détails" title="Voir les détails">👁</button>
         ${f.statut!=='paye'?`<button class="btn btn-sm btn-green" onclick="payerFacture('${escapeInline(f.id)}')">💰</button>`:''}
-        <button class="btn btn-sm btn-danger" onclick="deleteFacture('${escapeInline(f.id)}')">×</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteFacture('${escapeInline(f.id)}')" aria-label="Supprimer" title="Supprimer">×</button>
       </td>
     </tr>`;
   }).join('') : `<tr><td colspan="9" class="empty">Aucune facture</td></tr>`;
@@ -1238,6 +1244,7 @@ function printableReport(id){
 }
 function printInvoice(){
   const w = window.open('','_blank');
+  if(!w){toast('Autorisez les fenêtres surgissantes pour imprimer ce document, puis réessayez.','warning');return;}
   const html = document.getElementById('invoicePrint').outerHTML;
   w.document.write(`<html><head><title>Facture</title>
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
@@ -1267,7 +1274,7 @@ function printInvoice(){
 async function payerFacture(id){
  const f=db.factures.find(x=>x.id===id);if(!f)return;
  if(!sessionActive()){toast('Ouvrez la caisse avant d’encaisser','warning');return;}
- const reste=f.total-f.paye;const value=prompt('Montant à encaisser (reste : '+fmt(reste)+')',reste);if(!value)return;
+ const reste=f.total-f.paye;const value=prompt('Encaissement en espèces — facture '+f.numero+' (reste : '+fmt(reste)+'). Montant reçu en espèces :',reste);if(!value)return;
  const montant=Number(value);
  if(!Number.isFinite(montant)||montant<=0||montant>reste){toast('Le paiement doit être positif et ne pas dépasser le reste à payer','error');return;}
  if(!cloudReady){toast('Une connexion serveur est nécessaire pour encaisser','danger');return;}
@@ -1309,7 +1316,7 @@ function renderCaisse(){
       <td>${c.type==='entree'?'<span class="badge badge-success">Entrée</span>':'<span class="badge badge-danger">Sortie</span>'}</td>
       <td><span class="badge badge-neutral">${escapeHtml(modeLabel(c.mode))}</span></td>
       <td style="font-weight:700;color:${escapeHtml(c.type==='entree'?'var(--success)':'var(--danger)')}">${escapeHtml(c.type==='entree'?'+':'-')} ${escapeHtml(fmt(c.montant))}</td>
-      <td><button class="btn btn-sm btn-danger" onclick="deleteMouv('${escapeInline(c.id)}')">×</button></td>
+      <td><button class="btn btn-sm btn-danger" onclick="deleteMouv('${escapeInline(c.id)}')" aria-label="Supprimer" title="Supprimer">×</button></td>
     </tr>
   `).join('') : `<tr><td colspan="7" class="empty">Aucun mouvement</td></tr>`;
 
@@ -1348,7 +1355,7 @@ function renderSessionBanner(){
           <div><div style="font-size:10px;color:var(--muted)">ENTRÉES</div><div style="font-weight:700;color:var(--success)">+${escapeHtml(fmt(entrees))}</div></div>
           <div><div style="font-size:10px;color:var(--muted)">SORTIES</div><div style="font-weight:700;color:var(--danger)">-${escapeHtml(fmt(sorties))}</div></div>
           <div style="background:var(--gold-soft);padding:8px 14px;border-radius:8px">
-            <div style="font-size:10px;color:var(--muted)">SOLDE ATTENDU</div>
+            <div style="font-size:10px;color:var(--muted)">SOLDE ATTENDU (TOUS MODES)</div>
             <div style="font-weight:800;font-size:18px;color:var(--brown-dark)">${escapeHtml(fmt(soldeAttendu))}</div>
           </div>
         </div>
@@ -1507,7 +1514,7 @@ function voirSessions(){
             <td>${escapeHtml(s.montantCompte!==null?fmt(s.montantCompte):'—')}</td>
             <td style="font-weight:700;color:${escapeHtml(s.ecart===null?'var(--muted)':(s.ecart===0?'var(--success)':(s.ecart>0?'#c17d00':'var(--danger)')))}">${escapeHtml(s.ecart!==null?(s.ecart>=0?'+':'')+fmt(s.ecart):'—')}</td>
             <td>${s.statut==='ouverte'?'<span class="badge badge-success">Ouverte</span>':'<span class="badge badge-neutral">Fermée</span>'}</td>
-            <td><button class="btn btn-sm btn-gold" onclick="imprimerRapportSession('${escapeInline(s.id)}')">🖨</button></td>
+            <td><button class="btn btn-sm btn-gold" onclick="imprimerRapportSession('${escapeInline(s.id)}')" aria-label="Imprimer" title="Imprimer">🖨</button></td>
           </tr>
         `).join(''):'<tr><td colspan="8" class="empty">Aucune session</td></tr>'}</tbody>
       </table>
@@ -1527,6 +1534,7 @@ function imprimerRapportSession(sid){
   mvts.forEach(m=>{ if(parMode[m.mode]) parMode[m.mode][m.type==='entree'?'in':'out']+=m.montant; });
   const c = db.config;
   const w = window.open('','_blank','width=800,height=900');
+  if(!w){toast('Autorisez les fenêtres surgissantes pour imprimer ce document, puis réessayez.','warning');return;}
   w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Rapport Z — ${escapeHtml(s.numero)}</title>
     <style>
       body{font-family:'Helvetica',sans-serif;padding:25px;color:#333;font-size:12px}
@@ -1685,8 +1693,8 @@ function renderDepenses(){
       <td style="font-weight:600;color:var(--danger)">${escapeHtml(fmt(d.montant))}</td>
       <td>${statutBadge(d.statut)}</td>
       <td>
-        <button class="btn btn-sm btn-ghost" onclick="editDep('${escapeInline(d.id)}')">✎</button>
-        <button class="btn btn-sm btn-danger" onclick="deleteDep('${escapeInline(d.id)}')">×</button>
+        <button class="btn btn-sm btn-ghost" onclick="editDep('${escapeInline(d.id)}')" aria-label="Modifier" title="Modifier">✎</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteDep('${escapeInline(d.id)}')" aria-label="Supprimer" title="Supprimer">×</button>
       </td>
     </tr>
   `).join('') : `<tr><td colspan="7" class="empty">Aucune dépense</td></tr>`;
@@ -1770,8 +1778,8 @@ function renderPersonnel(){
       <td>${escapeHtml(fmt(p.salaire))}</td>
       <td>${statutBadge(p.actif?'actif':'inactif')}</td>
       <td>
-        <button class="btn btn-sm btn-ghost" onclick="editEmp('${escapeInline(p.id)}')">✎</button>
-        <button class="btn btn-sm btn-danger" onclick="deleteEmp('${escapeInline(p.id)}')">×</button>
+        <button class="btn btn-sm btn-ghost" onclick="editEmp('${escapeInline(p.id)}')" aria-label="Modifier" title="Modifier">✎</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteEmp('${escapeInline(p.id)}')" aria-label="Supprimer" title="Supprimer">×</button>
       </td>
     </tr>
   `).join('') : `<tr><td colspan="8" class="empty">Aucun employé</td></tr>`;
@@ -2129,8 +2137,8 @@ function renderMagasins(){
       <td>${escapeHtml(fmt(m.tarifMensuel))}</td>
       <td>${m.statut==='loue'?'<span class="badge badge-success">Loué</span>':'<span class="badge badge-info">Libre</span>'}</td>
       <td>
-        <button class="btn btn-sm btn-ghost" onclick="editMagasin('${escapeInline(m.id)}')">✎</button>
-        <button class="btn btn-sm btn-danger" onclick="deleteMagasin('${escapeInline(m.id)}')">×</button>
+        <button class="btn btn-sm btn-ghost" onclick="editMagasin('${escapeInline(m.id)}')" aria-label="Modifier" title="Modifier">✎</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteMagasin('${escapeInline(m.id)}')" aria-label="Supprimer" title="Supprimer">×</button>
       </td>
     </tr>
   `).join('') : `<tr><td colspan="6" class="empty">Aucun magasin</td></tr>`;
@@ -2318,8 +2326,8 @@ function renderStock(){
       <td>${escapeHtml(fmt(s.quantite*s.prixUnitaire))}</td>
       <td>${escapeHtml(s.datePeremption?fmtDate(s.datePeremption):'—')}</td>
       <td>
-        <button class="btn btn-sm btn-ghost" onclick="editStock('${escapeInline(s.id)}')">✎</button>
-        <button class="btn btn-sm btn-danger" onclick="deleteStock('${escapeInline(s.id)}')">×</button>
+        <button class="btn btn-sm btn-ghost" onclick="editStock('${escapeInline(s.id)}')" aria-label="Modifier" title="Modifier">✎</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteStock('${escapeInline(s.id)}')" aria-label="Supprimer" title="Supprimer">×</button>
       </td>
     </tr>`;
   }).join('') : `<tr><td colspan="9" class="empty">Aucun article</td></tr>`;
@@ -2441,8 +2449,8 @@ function renderPointage(){
       <td>${escapeHtml(p.shift==='nuit'?'🌙 Nuit':'☀ Jour')}</td>
       <td>${escapeHtml(p.note||'—')}</td>
       <td>
-        <button class="btn btn-sm btn-ghost" onclick="editPointage('${escapeInline(p.id)}')">✎</button>
-        <button class="btn btn-sm btn-danger" onclick="deletePointage('${escapeInline(p.id)}')">×</button>
+        <button class="btn btn-sm btn-ghost" onclick="editPointage('${escapeInline(p.id)}')" aria-label="Modifier" title="Modifier">✎</button>
+        <button class="btn btn-sm btn-danger" onclick="deletePointage('${escapeInline(p.id)}')" aria-label="Supprimer" title="Supprimer">×</button>
       </td>
     </tr>`;
   }).join('') : `<tr><td colspan="9" class="empty">Aucun pointage pour cette date</td></tr>`;
@@ -2584,9 +2592,9 @@ function renderPaie(){
       <td style="font-weight:700;color:var(--success)">${escapeHtml(fmt(x.salaireNet))}</td>
       <td>${statutBadge(x.statut)}</td>
       <td>
-        <button class="btn btn-sm btn-ghost" onclick="viewBulletin('${escapeInline(x.id)}')">👁</button>
-        <button class="btn btn-sm btn-gold" onclick="imprimerBulletin('${escapeInline(x.id)}')">🖨</button>
-        <button class="btn btn-sm btn-danger" onclick="deletePaie('${escapeInline(x.id)}')">×</button>
+        <button class="btn btn-sm btn-ghost" onclick="viewBulletin('${escapeInline(x.id)}')" aria-label="Voir les détails" title="Voir les détails">👁</button>
+        <button class="btn btn-sm btn-gold" onclick="imprimerBulletin('${escapeInline(x.id)}')" aria-label="Imprimer" title="Imprimer">🖨</button>
+        <button class="btn btn-sm btn-danger" onclick="deletePaie('${escapeInline(x.id)}')" aria-label="Supprimer" title="Supprimer">×</button>
       </td>
     </tr>`;
   }).join('') : `<tr><td colspan="8" class="empty">Aucun bulletin pour cette période</td></tr>`;
@@ -2702,6 +2710,7 @@ function imprimerBulletin(id){
   const c = db.config;
   const retenues = x.cnss + x.irpp + (x.avances||0);
   const w = window.open('','_blank','width=800,height=900');
+  if(!w){toast('Autorisez les fenêtres surgissantes pour imprimer ce document, puis réessayez.','warning');return;}
   w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Bulletin ${escapeHtml(x.numero)} ${x.statut==='brouillon'?'— BROUILLON':''}</title>
     <style>
       body{font-family:'Helvetica',sans-serif;padding:30px;color:#333;font-size:12px}
@@ -2912,8 +2921,8 @@ function renderPlanComptable(){
       <td>Classe ${escapeHtml(c.classe)}</td>
       <td><span class="badge badge-neutral">${escapeHtml(c.type)}</span></td>
       <td>
-        <button class="btn btn-sm btn-ghost" onclick="editCompte('${escapeInline(c.numero)}')">✎</button>
-        <button class="btn btn-sm btn-danger" onclick="deleteCompte('${escapeInline(c.numero)}')">×</button>
+        <button class="btn btn-sm btn-ghost" onclick="editCompte('${escapeInline(c.numero)}')" aria-label="Modifier" title="Modifier">✎</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteCompte('${escapeInline(c.numero)}')" aria-label="Supprimer" title="Supprimer">×</button>
       </td>
     </tr>
   `).join('') : '<tr><td colspan="5" class="empty">Aucun compte</td></tr>';
@@ -2990,7 +2999,7 @@ function renderEcritures(){
       <td style="text-align:right;color:var(--danger);font-weight:600">${escapeHtml(e.credit?fmt(e.credit):'')}</td>
       <td>
         ${e.auto?'<span style="color:var(--muted);font-size:11px">Auto</span>':escapeHtml('')}
-        <button class="btn btn-sm btn-danger" onclick="deleteEcriture('${escapeInline(e.id)}')">×</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteEcriture('${escapeInline(e.id)}')" aria-label="Supprimer" title="Supprimer">×</button>
       </td>
     </tr>`;
   }).join('') : '<tr><td colspan="8" class="empty">Aucune écriture</td></tr>';
@@ -3039,7 +3048,7 @@ function openEcritureModal(){
         <div class="form-group" style="margin:0"><label style="font-size:10px">Crédit</label>
           <input type="number" class="form-control ec-cre" value="0" oninput="calcEcTotaux()">
         </div>
-        <button type="button" class="btn btn-sm btn-danger" onclick="this.parentElement.remove();calcEcTotaux()">×</button>
+        <button type="button" class="btn btn-sm btn-danger" onclick="this.parentElement.remove();calcEcTotaux()" aria-label="Supprimer" title="Supprimer">×</button>
       </div>
     </template>
   `,`<button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
@@ -3637,12 +3646,12 @@ function renderCommandes(){
       <td style="font-weight:700">${escapeHtml(fmt(c.total))}</td>
       <td>${statutCmdBadge(c.statut)}</td>
       <td style="white-space:nowrap">
-        <button class="btn btn-sm btn-ghost" onclick="viewCommande('${escapeInline(c.id)}')" title="Voir">👁</button>
+        <button class="btn btn-sm btn-ghost" onclick="viewCommande('${escapeInline(c.id)}')" aria-label="Voir les détails" title="Voir les détails">👁</button>
         ${c.statut!=='paye' && c.statut!=='annulee' ? `<button class="btn btn-sm btn-gold" onclick="changerStatutCmd('${escapeInline(c.id)}')" title="Changer statut">🔄</button>`:''}
-        ${c.statut!=='paye' && c.statut!=='annulee' ? `<button class="btn btn-sm btn-primary" onclick="editCommande('${escapeInline(c.id)}')" title="Modifier">✎</button>`:''}
+        ${c.statut!=='paye' && c.statut!=='annulee' ? `<button class="btn btn-sm btn-primary" onclick="editCommande('${escapeInline(c.id)}')" aria-label="Modifier" title="Modifier">✎</button>`:''}
         ${c.statut!=='paye' && c.statut!=='annulee' ? `<button class="btn btn-sm btn-green" onclick="payerCmd('${escapeInline(c.id)}')" title="Encaisser">💰</button>`:''}
         <button class="btn btn-sm btn-gold" onclick="imprimerTicketCuisine('${escapeInline(c.id)}')" title="Ticket cuisine">👨‍🍳</button>
-        <button class="btn btn-sm btn-gold" onclick="imprimerFactureResto('${escapeInline(c.id)}')" title="Addition">🖨</button>
+        <button class="btn btn-sm btn-gold" onclick="imprimerFactureResto('${escapeInline(c.id)}')" aria-label="Imprimer" title="Imprimer">🖨</button>
       </td>
     </tr>`;
   }).join('') : '<tr><td colspan="9" class="empty">Aucune commande</td></tr>';
@@ -3766,7 +3775,8 @@ function openCommandeModal(id){
     </form>
   `, `<button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
       <button class="btn btn-primary" onclick="document.getElementById('cmdForm').requestSubmit()">💾 ${escapeHtml(id?'Mettre à jour':'Enregistrer')}</button>`);
-  setTimeout(()=>{ onChangeTypeService(); refreshCmdLignes(); },50);
+  const commandForm=document.getElementById('cmdForm');
+  setTimeout(()=>{ if(commandForm?.isConnected&&document.getElementById('modalOverlay').classList.contains('active')){onChangeTypeService();refreshCmdLignes();} },50);
 }
 
 function onChangeTypeService(){
@@ -3819,7 +3829,7 @@ function refreshCmdLignes(){
       <td>
         <button type="button" class="btn btn-sm btn-ghost" onclick="cmdLignes[${escapeInline(i)}].qte++;refreshCmdLignes()">+</button>
         <button type="button" class="btn btn-sm btn-ghost" onclick="if(cmdLignes[${escapeInline(i)}].qte>1)cmdLignes[${escapeInline(i)}].qte--;refreshCmdLignes()">−</button>
-        <button type="button" class="btn btn-sm btn-danger" onclick="cmdLignes.splice(${escapeInline(i)},1);refreshCmdLignes()">×</button>
+        <button type="button" class="btn btn-sm btn-danger" onclick="cmdLignes.splice(${escapeInline(i)},1);refreshCmdLignes()" aria-label="Supprimer" title="Supprimer">×</button>
       </td>
     </tr>
   `).join('') : '<tr><td colspan="7" class="empty">Aucun article</td></tr>';
@@ -3940,7 +3950,7 @@ function ajouterPaiementLigne(mt, mode){
       <option value="carte" ${escapeHtml(mode==='carte'?'selected':'')}>💳 Carte</option>
     </select>
     <input type="number" class="form-control" value="${escapeHtml(mt||0)}" oninput="window._paiements[${escapeInline(idx)}].montant=parseFloat(this.value)||0;majTotalPay()">
-    <button type="button" class="btn btn-sm btn-danger" onclick="window._paiements[${escapeInline(idx)}].montant=0;this.parentElement.remove();majTotalPay()">×</button>
+    <button type="button" class="btn btn-sm btn-danger" onclick="window._paiements[${escapeInline(idx)}].montant=0;this.parentElement.remove();majTotalPay()" aria-label="Supprimer" title="Supprimer">×</button>
   </div>`;
   document.getElementById('paiementsLignes').insertAdjacentHTML('beforeend', html);
   majTotalPay();
@@ -4027,6 +4037,7 @@ function imprimerTicketCuisine(id){
   const cuisine = (c.lignes||[]).filter(l=>l.envoi!=='bar');
   const bar = (c.lignes||[]).filter(l=>l.envoi==='bar');
   const w = window.open('','_blank','width=400,height=600');
+  if(!w){toast('Autorisez les fenêtres surgissantes pour imprimer ce document, puis réessayez.','warning');return;}
   const tickets = [
     {titre:'👨‍🍳 CUISINE', lignes:cuisine, couleur:'#5C3A1E'},
     {titre:'🍹 BAR', lignes:bar, couleur:'#8B5A2B'}
@@ -4072,6 +4083,7 @@ function imprimerFactureResto(id){
   const c = db.commandes.find(x=>x.id===id);
   const conf = db.config;
   const w = window.open('','_blank','width=380,height=700');
+  if(!w){toast('Autorisez les fenêtres surgissantes pour imprimer ce document, puis réessayez.','warning');return;}
   w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Addition ${escapeHtml(c.numero)}</title>
     <style>
       body{font-family:'Courier New',monospace;padding:12px;font-size:13px;color:#000;width:280px;margin:0 auto}
@@ -4276,7 +4288,7 @@ function renderCuisine(){
         ${c.statut==='commandee'?`<button class="btn btn-sm btn-gold" onclick="setStatutCmd('${escapeInline(c.id)}','cuisine')">▶ Démarrer</button>`:''}
         ${c.statut==='cuisine'?`<button class="btn btn-sm btn-green" onclick="setStatutCmd('${escapeInline(c.id)}','prete')">✓ Prête</button>`:''}
         ${c.statut==='prete'?`<button class="btn btn-sm btn-primary" onclick="setStatutCmd('${escapeInline(c.id)}','servie')">🍽 Servie</button>`:''}
-        <button class="btn btn-sm btn-ghost" onclick="viewCommande('${escapeInline(c.id)}')">👁</button>
+        <button class="btn btn-sm btn-ghost" onclick="viewCommande('${escapeInline(c.id)}')" aria-label="Voir les détails" title="Voir les détails">👁</button>
       </div>
     </div>`;
   }).join('') : '<div class="empty" style="grid-column:1/-1;padding:40px;text-align:center"><div style="font-size:48px">👨‍🍳</div>Aucune commande en cuisine actuellement</div>';
@@ -4303,8 +4315,8 @@ function renderReservationsResto(){
       <td>${statutResaResBadge(r.statut)}</td>
       <td>
         <button class="btn btn-sm btn-primary" onclick="honorerResa('${escapeInline(r.id)}')">✓ Honorer</button>
-        <button class="btn btn-sm btn-ghost" onclick="editResaResto('${escapeInline(r.id)}')">✎</button>
-        <button class="btn btn-sm btn-danger" onclick="annulerResa('${escapeInline(r.id)}')">×</button>
+        <button class="btn btn-sm btn-ghost" onclick="editResaResto('${escapeInline(r.id)}')" aria-label="Modifier" title="Modifier">✎</button>
+        <button class="btn btn-sm btn-danger" onclick="annulerResa('${escapeInline(r.id)}')" aria-label="Supprimer" title="Supprimer">×</button>
       </td>
     </tr>`;
   }).join('') : '<tr><td colspan="8" class="empty">Aucune réservation ce jour</td></tr>';
@@ -4410,8 +4422,8 @@ window.renderMenu = function(){
       <td>${m.disponible?'<span class="badge badge-success">Oui</span>':'<span class="badge badge-danger">Non</span>'}</td>
       <td>
         <button class="btn btn-sm btn-ghost" onclick="toggleDispoMenu('${escapeInline(m.id)}')">🔄</button>
-        <button class="btn btn-sm btn-ghost" onclick="editMenu('${escapeInline(m.id)}')">✎</button>
-        <button class="btn btn-sm btn-danger" onclick="deleteMenu('${escapeInline(m.id)}')">×</button>
+        <button class="btn btn-sm btn-ghost" onclick="editMenu('${escapeInline(m.id)}')" aria-label="Modifier" title="Modifier">✎</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteMenu('${escapeInline(m.id)}')" aria-label="Supprimer" title="Supprimer">×</button>
       </td>
     </tr>`;
   }).join('') : '<tr><td colspan="8" class="empty">Aucun article</td></tr>';
@@ -4535,8 +4547,8 @@ function renderFormules(){
       </div>
       ${f.validite?`<div style="font-size:11px;color:var(--muted);margin-top:8px">Valide : ${escapeHtml(f.validite)}</div>`:''}
       <div style="margin-top:10px;display:flex;gap:6px">
-        <button class="btn btn-sm btn-ghost" onclick="editFormule('${escapeInline(f.id)}')">✎</button>
-        <button class="btn btn-sm btn-danger" onclick="deleteFormule('${escapeInline(f.id)}')">×</button>
+        <button class="btn btn-sm btn-ghost" onclick="editFormule('${escapeInline(f.id)}')" aria-label="Modifier" title="Modifier">✎</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteFormule('${escapeInline(f.id)}')" aria-label="Supprimer" title="Supprimer">×</button>
       </div>
     </div>
   `).join('') : '<div class="empty" style="grid-column:1/-1">Aucune formule</div>';
@@ -4887,7 +4899,7 @@ function refreshDocTotals(){
       <td>${escapeHtml(l.qte)}</td>
       <td>${escapeHtml(fmt(l.pu))}</td>
       <td style="font-weight:700">${escapeHtml(fmt(l.qte*l.pu))}</td>
-      <td><button type="button" class="btn btn-sm btn-danger" onclick="_docLignes.splice(${escapeInline(i)},1);refreshDocTotals()">×</button></td>
+      <td><button type="button" class="btn btn-sm btn-danger" onclick="_docLignes.splice(${escapeInline(i)},1);refreshDocTotals()" aria-label="Supprimer" title="Supprimer">×</button></td>
     </tr>
   `).join('') : '<tr><td colspan="6" class="empty">Aucune ligne</td></tr>';
 
@@ -4981,11 +4993,11 @@ function renderProformas(){
       <td style="font-weight:700">${escapeHtml(fmt(p.total))}</td>
       <td>${statutDocBadge('proforma',p.statut)}</td>
       <td style="white-space:nowrap">
-        <button class="btn btn-sm btn-ghost" onclick="viewDoc('${escapeInline(p.id)}','proforma')" title="Voir">👁</button>
-        <button class="btn btn-sm btn-primary" onclick="openDocModal('proforma','${escapeInline(p.id)}')" title="Modifier">✎</button>
-        <button class="btn btn-sm btn-gold" onclick="imprimerDoc('${escapeInline(p.id)}','proforma')" title="Imprimer">🖨</button>
+        <button class="btn btn-sm btn-ghost" onclick="viewDoc('${escapeInline(p.id)}','proforma')" aria-label="Voir les détails" title="Voir les détails">👁</button>
+        <button class="btn btn-sm btn-primary" onclick="openDocModal('proforma','${escapeInline(p.id)}')" aria-label="Modifier" title="Modifier">✎</button>
+        <button class="btn btn-sm btn-gold" onclick="imprimerDoc('${escapeInline(p.id)}','proforma')" aria-label="Imprimer" title="Imprimer">🖨</button>
         ${p.statut!=='convertie'?`<button class="btn btn-sm btn-green" onclick="convertirEnFacture('${escapeInline(p.id)}','proforma')" title="Convertir en facture">→🧾</button>`:''}
-        <button class="btn btn-sm btn-danger" onclick="deleteDoc('${escapeInline(p.id)}','proforma')">×</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteDoc('${escapeInline(p.id)}','proforma')" aria-label="Supprimer" title="Supprimer">×</button>
       </td>
     </tr>
   `).join('') : '<tr><td colspan="8" class="empty">Aucune proforma</td></tr>';
@@ -5017,11 +5029,11 @@ function renderDevis(){
       <td style="font-weight:700">${escapeHtml(fmt(d.total))}</td>
       <td>${statutDocBadge('devis',d.statut)}</td>
       <td style="white-space:nowrap">
-        <button class="btn btn-sm btn-ghost" onclick="viewDoc('${escapeInline(d.id)}','devis')" title="Voir">👁</button>
-        <button class="btn btn-sm btn-primary" onclick="openDocModal('devis','${escapeInline(d.id)}')" title="Modifier">✎</button>
-        <button class="btn btn-sm btn-gold" onclick="imprimerDoc('${escapeInline(d.id)}','devis')" title="Imprimer">🖨</button>
+        <button class="btn btn-sm btn-ghost" onclick="viewDoc('${escapeInline(d.id)}','devis')" aria-label="Voir les détails" title="Voir les détails">👁</button>
+        <button class="btn btn-sm btn-primary" onclick="openDocModal('devis','${escapeInline(d.id)}')" aria-label="Modifier" title="Modifier">✎</button>
+        <button class="btn btn-sm btn-gold" onclick="imprimerDoc('${escapeInline(d.id)}','devis')" aria-label="Imprimer" title="Imprimer">🖨</button>
         ${d.statut!=='convertie'?`<button class="btn btn-sm btn-green" onclick="convertirEnFacture('${escapeInline(d.id)}','devis')" title="Convertir en facture">→🧾</button>`:''}
-        <button class="btn btn-sm btn-danger" onclick="deleteDoc('${escapeInline(d.id)}','devis')">×</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteDoc('${escapeInline(d.id)}','devis')" aria-label="Supprimer" title="Supprimer">×</button>
       </td>
     </tr>
   `).join('') : '<tr><td colspan="8" class="empty">Aucun devis</td></tr>';
@@ -5137,6 +5149,7 @@ function imprimerDoc(id, type){
   const c = doc.clientId ? db.clients.find(x=>x.id===doc.clientId) : null;
   const cfg = DOC_TYPES[type];
   const w = window.open('','_blank');
+  if(!w){toast('Autorisez les fenêtres surgissantes pour imprimer ce document, puis réessayez.','warning');return;}
   w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escapeHtml(cfg.label)} ${escapeHtml(doc.numero)}</title>
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
@@ -5408,6 +5421,7 @@ function imprimerRapportResa(){
   const du = document.getElementById('rapResaDu').value;
   const au = document.getElementById('rapResaAu').value;
   const w = window.open('','_blank','width=1000,height=800');
+  if(!w){toast('Autorisez les fenêtres surgissantes pour imprimer ce document, puis réessayez.','warning');return;}
   w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Rapport Réservations</title>
     <style>
       body{font-family:Helvetica,sans-serif;padding:20px;color:#333;font-size:12px}
@@ -5597,6 +5611,7 @@ function imprimerRapportStock(){
   const du = document.getElementById('rapStkDu').value;
   const au = document.getElementById('rapStkAu').value;
   const w = window.open('','_blank','width=1000,height=800');
+  if(!w){toast('Autorisez les fenêtres surgissantes pour imprimer ce document, puis réessayez.','warning');return;}
   w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Rapport Stock</title>
     <style>
       body{font-family:Helvetica,sans-serif;padding:20px;color:#333;font-size:12px}
@@ -5763,6 +5778,7 @@ function imprimerRapportResto(){
   const du = document.getElementById('rapRestoDu').value;
   const au = document.getElementById('rapRestoAu').value;
   const w = window.open('','_blank','width=1000,height=800');
+  if(!w){toast('Autorisez les fenêtres surgissantes pour imprimer ce document, puis réessayez.','warning');return;}
   w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Rapport Restaurant</title>
     <style>
       body{font-family:Helvetica,sans-serif;padding:20px;color:#333;font-size:12px}
@@ -5986,33 +6002,6 @@ function exportAudit(){
     ].join(';') + '\n';
   });
   downloadFile('audit_'+new Date().toISOString().slice(0,10)+'.csv', csv);
-}
-
-function purgerAudit(){
-  openModal('🗑 Purger les anciens événements',`
-    <div class="form-group">
-      <label>Supprimer les événements antérieurs à :</label>
-      <input type="date" class="form-control" id="purgDate" value="${escapeHtml(new Date(Date.now()-90*86400000).toISOString().slice(0,10))}">
-    </div>
-    <div style="background:#fff3cd;border-left:4px solid #ffc107;padding:10px;border-radius:6px;font-size:13px">
-      ⚠ Cette action est irréversible. Les événements critiques (connexions échouées, actions financières importantes) sont préservés.
-    </div>
-  `,`<button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
-     <button class="btn btn-danger" onclick="confirmerPurgeAudit()">🗑 Purger</button>`);
-}
-function confirmerPurgeAudit(){
-  const seuil = document.getElementById('purgDate').value;
-  const avant = db.auditLog.length;
-  // Préserver les actions critiques et les connexions
-  db.auditLog = db.auditLog.filter(e=>{
-    if(e.timestamp.slice(0,10) >= seuil) return true;
-    if(e.action === 'critical' || e.action === 'delete') return true;
-    return false;
-  });
-  const supprimes = avant - db.auditLog.length;
-  logAudit('Audit','critical','','Purge du journal d\'audit — '+supprimes+' entrées supprimées (antérieures au '+seuil+')');
-  saveDB();closeModal();renderAudit();
-  toast(supprimes+' événements purgés (critiques préservés)','warning');
 }
 
 // ============================================================
@@ -6476,16 +6465,42 @@ function confirmerPurgeAudit(){
 })();
 
 // ============ MODAL ============
+let modalReturnFocus=null;
 function openModal(title, body, footer){
+  const overlay=document.getElementById('modalOverlay');
+  if(!overlay.classList.contains('active'))modalReturnFocus=document.activeElement;
   document.getElementById('modalTitle').textContent = title;
   document.getElementById('modalBody').innerHTML = body;
   document.getElementById('modalFooter').innerHTML = footer||'';
-  document.getElementById('modalBox').classList.remove('lg','xl');
-  document.getElementById('modalOverlay').classList.add('active');
+  const box=document.getElementById('modalBox');
+  box.classList.remove('lg','xl');
+  box.querySelectorAll('.form-group').forEach(group=>{
+    const label=group.querySelector('label');
+    const control=group.querySelector('input[id],select[id],textarea[id]');
+    if(label&&control&&!label.htmlFor)label.htmlFor=control.id;
+  });
+  overlay.classList.add('active');
+  document.getElementById('app').inert=true;
+  (box.querySelector('[autofocus],input:not([readonly]):not([type="hidden"]):not([disabled]),select:not([disabled]),textarea:not([disabled])')||box.querySelector('.modal-footer button')||box).focus();
 }
 function closeModal(){
   document.getElementById('modalOverlay').classList.remove('active');
+  document.getElementById('app').inert=false;
+  if(modalReturnFocus?.isConnected)modalReturnFocus.focus();
+  modalReturnFocus=null;
 }
+document.addEventListener('keydown',event=>{
+  const overlay=document.getElementById('modalOverlay');
+  if(!overlay.classList.contains('active')||overlay.inert)return;
+  if(event.key==='Escape'){event.preventDefault();closeModal();return;}
+  if(event.key!=='Tab')return;
+  const box=document.getElementById('modalBox');
+  const controls=[...box.querySelectorAll('button:not([disabled]),input:not([disabled]):not([type="hidden"]),select:not([disabled]),textarea:not([disabled]),a[href],[tabindex="0"]')].filter(el=>!el.hidden&&el.style.display!=='none');
+  const first=controls[0],last=controls[controls.length-1];
+  if(!first){event.preventDefault();box.focus();return;}
+  if(event.shiftKey&&(document.activeElement===first||!box.contains(document.activeElement))){event.preventDefault();last.focus();}
+  else if(!event.shiftKey&&(document.activeElement===last||!box.contains(document.activeElement))){event.preventDefault();first.focus();}
+});
 
 // ============ RELIABILITY & SECURITY ============
 const CORE = [
@@ -6510,7 +6525,7 @@ function requireManager(){if(isManager())return true;toast('Action réservée à
 function escapeInline(value){return escapeHtml(String(value??'').replace(/[\\'"\n\r<>]/g,c=>({'\\':'\\\\',"'":'\\u0027','"':'\\u0022','\n':'\\n','\r':'\\r','<':'\\u003c','>':'\\u003e'}[c])));}
 function escapeHtml(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function refreshRoomStatus(id){
- const ch=db.chambres.find(c=>c.id===id);if(!ch)return;
+ const ch=db.chambres.find(c=>c.id===id);if(!ch||ch.statut==='maintenance')return;
  const rs=db.reservations.filter(r=>r.chambreId===id);
  ch.statut=rs.some(r=>r.statut==='checkin')?'occupee':rs.some(r=>r.statut==='confirmee')?'reservee':'libre';
 }
@@ -6653,7 +6668,7 @@ showPage=function(name){
 const originalFilterMenu=filtrerMenuParRole;
 filtrerMenuParRole=function(){originalFilterMenu();if(!isManager())document.querySelectorAll('.nav-item').forEach(item=>{if(['personnel','pointage','paie','comptabilite','depenses','audit'].includes(item.dataset.page))item.style.display='none';});};
 // Financial movements and deleting records require a manager. Routine invoicing remains available at reception.
-for(const name of ['saveStock','saveMouvStock','saveMenu','toggleDispoMenu','savePersonnel','savePointage','savePermanence','savePaie','genererPaieMassive','confirmerOuverture','confirmerFermeture','saveMouvement','deleteMouv','saveDepense','deleteDepense','deleteFacture','deleteRoom','deleteClient','deleteStock','deleteCommande','deleteMenu','saveConfig','importData','resetData','purgerAudit','confirmerPurgeAudit']){
+for(const name of ['saveStock','saveMouvStock','saveMenu','toggleDispoMenu','savePersonnel','savePointage','savePermanence','savePaie','genererPaieMassive','confirmerOuverture','confirmerFermeture','saveMouvement','deleteMouv','saveDepense','deleteDepense','deleteFacture','deleteRoom','deleteClient','deleteStock','deleteCommande','deleteMenu','saveConfig','importData','resetData']){
  const original=window[name];if(typeof original==='function')window[name]=function(...args){if(!requireManager()){args[0]?.preventDefault?.();return;}return original(...args);};
 }
 const originalSaveRoom=saveRoom;

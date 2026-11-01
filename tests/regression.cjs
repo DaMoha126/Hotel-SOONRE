@@ -52,6 +52,14 @@ const captureRegression=await dom.window.eval(`(()=>{
  openCommandeModal('capture-command');refreshCmdLignes();check(document.getElementById('cmdLignesBody').rows.length===1&&document.getElementById('cmdTVA').textContent===fmt(180),'Edits an order and renders its configured tax and article row');closeModal();
  return passed;
 })()`);console.log(captureRegression.map(x=>'PASS '+x).join('\n'));
+const bookingChecks=await dom.window.eval(`(()=>{
+ const passed=[];const check=(ok,name)=>{if(!ok)throw Error(name);passed.push(name);};
+ cloudReady=false;db.factures=[];db.clients=[{id:'guard-client',nom:'Test'}];db.chambres=[{id:'guard-room',numero:'G',type:'Standard',statut:'libre',prix:100}];db.reservations=[];
+ openResaModal();document.getElementById('rClient').value='guard-client';document.getElementById('rChambre').value='guard-room';document.getElementById('rArrivee').value='2026-11-01';document.getElementById('rDepart').value='2026-11-02';calcResaTotal();
+ const option=document.createElement('option');option.value='checkin';document.getElementById('rStatut').append(option);document.getElementById('rStatut').value='checkin';saveResa({preventDefault(){}},'');check(db.reservations.length===0,'Booking form cannot bypass check-in action');
+ document.getElementById('rStatut').value='confirmee';db.chambres[0].statut='maintenance';saveResa({preventDefault(){}},'');check(db.reservations.length===0,'Booking rejects a room under maintenance');
+ db.reservations=[{id:'guard-resa',clientId:'guard-client',chambreId:'guard-room',statut:'confirmee',arrivee:'2026-11-01',depart:'2026-11-02',montant:100,paye:0}];checkinResa('guard-resa');check(db.reservations[0].statut==='confirmee','Check-in rejects maintenance room');closeModal();return passed;
+})()`);console.log(bookingChecks.map(x=>'PASS '+x).join('\n'));
 const pages=await dom.window.eval(`(async()=>{
  cloudReady=false;seedData();db.currentUser={id:'u',nom:'Direction',role:'Directeur Général',actif:true};
  sb.from=()=>{const q={select:()=>q,eq:()=>q,order:()=>q,limit:()=>q,then:resolve=>Promise.resolve({data:[],error:null}).then(resolve)};return q;};
