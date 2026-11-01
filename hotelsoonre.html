@@ -680,7 +680,6 @@ textarea.form-control{min-height:80px;resize:vertical}
       <div class="nav-item" data-page="factures"><span class="icon">💰</span>Facturation</div>
       <div class="nav-item" data-page="caisse"><span class="icon">💵</span>Caisse</div>
       <div class="nav-item" data-page="depenses"><span class="icon">📉</span>Dépenses</div>
-      <div class="nav-item" data-page="comptabilite"><span class="icon">📚</span>Comptabilité (OHADA)</div>
       <div class="nav-item" data-page="comptabilite"><span class="icon">📚</span>Comptabilité (SYSCOHADA)</div>
 
       <div class="nav-section">Ressources Humaines</div>
@@ -704,7 +703,7 @@ textarea.form-control{min-height:80px;resize:vertical}
   <div class="main">
     <div class="topbar">
       <div style="display:flex;align-items:center;gap:12px">
-        <button class="mobile-toggle" onclick="toggleSidebar()">☰</button>
+        <button class="mobile-toggle" onclick="toggleSidebar()" aria-label="Ouvrir ou fermer le menu">☰</button>
         <div>
           <h1 id="pageTitle">Tableau de bord</h1>
           <div class="breadcrumb" id="pageBreadcrumb">Vue d'ensemble de l'hôtel</div>
@@ -729,9 +728,9 @@ textarea.form-control{min-height:80px;resize:vertical}
       <div class="page active" id="page-dashboard">
         <div class="kpi-grid">
           <div class="kpi" style="--accent:var(--gold)">
-            <div class="label">Chiffre d'affaires (mois) <div class="icon-box">💰</div></div>
+            <div class="label">Factures du mois : encaissé <div class="icon-box">💰</div></div>
             <div class="value" id="kpiCA">0 FCFA</div>
-            <div class="trend up" id="kpiCATrend">↑ +12%</div>
+            <div class="trend" id="kpiCATrend">Cumul payé, selon la date de facture</div>
           </div>
           <div class="kpi" style="--accent:var(--success)">
             <div class="label">Taux d'occupation <div class="icon-box">🛏️</div></div>
@@ -2345,7 +2344,6 @@ textarea.form-control{min-height:80px;resize:vertical}
             <input type="date" class="form-control" id="audAu" onchange="renderAudit()">
           </div>
           <button class="btn btn-ghost" onclick="exportAudit()">📥 Exporter CSV</button>
-          <button class="btn btn-danger" onclick="purgerAudit()">🗑 Purger anciens</button>
         </div>
 
         <div class="card">
@@ -2454,17 +2452,17 @@ textarea.form-control{min-height:80px;resize:vertical}
 
 <!-- ============ MODAL CONTAINER ============ -->
 <div class="modal-overlay" id="modalOverlay" onclick="if(event.target===this)closeModal()">
-  <div class="modal" id="modalBox">
+  <div class="modal" id="modalBox" role="dialog" aria-modal="true" aria-labelledby="modalTitle" tabindex="-1">
     <div class="modal-header">
       <h3 id="modalTitle">Titre</h3>
-      <button class="close-btn" onclick="closeModal()">×</button>
+      <button class="close-btn" onclick="closeModal()" aria-label="Fermer la fenêtre" title="Fermer">×</button>
     </div>
     <div class="modal-body" id="modalBody"></div>
     <div class="modal-footer" id="modalFooter"></div>
   </div>
 </div>
 
-<div class="toast-container" id="toastContainer"></div>
+<div class="toast-container" id="toastContainer" role="status" aria-live="polite" aria-atomic="false"></div>
 
 <script src="app.js"></script>
 
