@@ -287,7 +287,9 @@ function toast(msg, type='success'){
   const t = document.createElement('div');
   t.className='toast '+type;
   t.textContent = msg;
-  document.getElementById('toastContainer').appendChild(t);
+  const container=document.getElementById('toastContainer');
+  while(container.children.length>=3)container.firstElementChild.remove();
+  container.appendChild(t);
   setTimeout(()=>{t.style.opacity='0';t.style.transform='translateX(20px)';t.style.transition='all 0.3s'},2600);
   setTimeout(()=>t.remove(),3000);
 }
@@ -2072,14 +2074,23 @@ function canManageProfile(user){
 }
 async function editUser(id){
  if(!requireManager())return;
- const {data:user,error}=await sb.from('profiles').select('id,nom,role,actif').eq('id',id).single();
+ const owner=db.hotelId,actor=db.currentUser.id;
+ const {data:user,error}=await sb.from('profiles').select('id,nom,role,actif').eq('hotel_id',owner).eq('id',id).single();
+ if(owner!==db.hotelId||actor!==db.currentUser?.id)return;
  if(error||!user||!canManageProfile(user)){toast('Gestion de ce compte non autorisée','warning');return;}
  const roles=['Directeur Général','Gérant','Accueil / Réception','Ménage','Maintenance'].filter(role=>canManageProfile({id,role}));
  openModal('Modifier le compte',`<form id="editUserForm" onsubmit="saveEditedUser(event,'${escapeInline(id)}')"><div class="form-group"><label>Nom complet</label><input id="editUserName" class="form-control" maxlength="200" required value="${escapeHtml(user.nom)}"></div><div class="form-group"><label>Rôle</label><select id="editUserRole" class="form-control">${roles.map(role=>`<option ${role===user.role?'selected':''}>${escapeHtml(role)}</option>`).join('')}</select></div><label><input type="checkbox" id="editUserActive" ${user.actif?'checked':''}> Compte actif</label></form>`,`<button class="btn btn-ghost" onclick="closeModal()">Annuler</button><button class="btn btn-primary" onclick="document.getElementById('editUserForm').requestSubmit()">Enregistrer</button>`);
+ const form=document.getElementById('editUserForm');form.dataset.hotelId=owner;form.dataset.actorId=actor;
 }
 async function saveEditedUser(event,id){
  event.preventDefault();if(!requireManager())return;
+ const form=document.getElementById('editUserForm');
+ if(!form||form.dataset.submitting==='true')return;
+ if(form.dataset.hotelId!==db.hotelId||form.dataset.actorId!==db.currentUser.id){toast('Hôtel changé : rouvrez le compte','warning');return;}
+ form.dataset.submitting='true';
  const {error}=await callServerRPC('modifier_utilisateur',{p_id:id,p_nom:document.getElementById('editUserName').value.trim(),p_role:document.getElementById('editUserRole').value,p_actif:document.getElementById('editUserActive').checked});
+ if(form.isConnected)form.dataset.submitting='false';
+ if(form.dataset.hotelId!==db.hotelId||form.dataset.actorId!==db.currentUser?.id)return;
  if(error){toast('Compte non modifié : '+error.message,'danger');return;}closeModal();await renderUsers();toast('Compte mis à jour');
 }
 
@@ -6544,17 +6555,22 @@ function snapshotRows(){
  for(const name of MODULES){if(!moduleAccessible(name))continue;const id=db.hotelId+':'+name;rows.set('app_collections:'+id,{table:'app_collections',id,data:{id,hotel_id:db.hotelId,name,data:structuredClone(db[name]??(name==='config'?{...defaultConfig}:[]))}});}
  return rows;
 }
-async function readAll(table){
+async function readAll(table,owner=db.hotelId){
  let rows=[];
- for(let start=0;;start+=500){const{data,error}=await sb.from(table).select('*').eq('hotel_id',db.hotelId).order('id').range(start,start+499);if(error)throw new Error('Chargement '+table+' : '+error.message);rows.push(...data);if(data.length<500)break;}
+ for(let start=0;;start+=500){const{data,error}=await sb.from(table).select('*').eq('hotel_id',owner).order('id').range(start,start+499);if(error)throw new Error('Chargement '+table+' : '+error.message);rows.push(...data);if(data.length<500)break;}
  return rows;
 }
+let cloudLoadGeneration=0;
 async function loadCloudState({preserveLocalModules=true}={}){
  if(!sb||!db.hotelId||!db.currentUser?.actif)throw new Error('Session inactive');
+ const owner=db.hotelId,user=db.currentUser.id,generation=++cloudLoadGeneration;
+ const stillCurrent=()=>generation===cloudLoadGeneration&&owner===db.hotelId&&user===db.currentUser?.id&&db.currentUser?.actif;
  cloudReady=false;await syncQueue.catch(()=>{});
- const owner=db.hotelId;const cached={};
+ if(!stillCurrent())throw new Error('Contexte hôtel changé : chargement abandonné');
+ const cached={};
  if(preserveLocalModules&&localOwner===owner&&isManager())for(const name of MODULES)if((legacyCache?.[name]??db[name])!==undefined)cached[name]=structuredClone(legacyCache?.[name]??db[name]);
- const tables=await Promise.all(CORE.map(x=>readAll(x[1])));const modules=await readAll('app_collections');
+ const tables=await Promise.all(CORE.map(x=>readAll(x[1],owner)));const modules=await readAll('app_collections',owner);
+ if(!stillCurrent())throw new Error('Contexte hôtel changé : chargement abandonné');
  clearSensitiveState();cloudBaseline.clear();baselineVersions.clear();
  CORE.forEach(([key,table,toDb,fromDb],i)=>{
   db[key]=tables[i].map(fromDb);
@@ -6622,6 +6638,7 @@ function queueCloudSync(){
  if(syncScheduled)return syncQueue;
  syncScheduled=true;
  syncQueue=syncQueue.catch(()=>{}).then(async()=>{
+  let wrote=false;
   // Each iteration captures current changes only; stale unchanged rows are never rewritten.
   while(cloudReady){
    const rows=snapshotRows();const changes=[];
@@ -6634,9 +6651,10 @@ function queueCloudSync(){
    persistRecovery();
    const{data,error}=await sb.rpc('sync_hotel_changes',{p_hotel:db.hotelId,p_changes:changes});
    if(error)throw new Error(error.message);
+   wrote=true;
    for(const result of data){const key=result.table+':'+result.id;if(result.deleted){cloudBaseline.delete(key);baselineVersions.delete(key);}else{const sent=changes.find(x=>x.table===result.table&&x.id===result.id);cloudBaseline.set(key,JSON.stringify(sent.data));baselineVersions.set(key,result.version);}}
   }
-  if(!window.hotelSyncPending)toast('Sauvegarde serveur confirmée');
+  if(wrote&&!window.hotelSyncPending)toast('Sauvegarde serveur confirmée');
  }).catch(error=>{
   window.hotelSyncPending=true;console.error('Synchronisation refusée',error);toast('Sauvegarde serveur échouée : '+error.message+'. La copie locale est conservée.','danger');showRecoveryAction();
  }).finally(()=>{syncScheduled=false;});
@@ -6736,8 +6754,8 @@ function mountHotelSelector(hotels,selected){
  select.replaceChildren(...availableHotels.map(h=>{const option=document.createElement('option');option.value=h.id;option.textContent=h.nom;return option;}));select.value=selected;
  let add=document.getElementById('addHotelButton');
  if(!add){add=document.createElement('button');add.id='addHotelButton';add.type='button';add.className='btn btn-primary';add.textContent='+ Ajouter un hôtel';add.onclick=openHotelModal;controls.append(add);}add.disabled=hotelCreationBusy;
- select.onchange=async()=>{const old=db.hotelId;await queueCloudSync();if(window.hotelSyncPending||recoveryBlocked){select.value=old;toast('Terminez ou récupérez la sauvegarde avant de changer d’hôtel','warning');return;}
- try{cloudReady=false;db.hotelId=select.value;localStorage.setItem('soonre-hotel:'+db.currentUser.id,db.hotelId);await loadCloudState();showApp();}catch(error){db.hotelId=old;select.value=old;toast(error.message,'danger');}
+ select.onchange=async()=>{const old=db.hotelId;select.disabled=true;await queueCloudSync();if(window.hotelSyncPending||recoveryBlocked){select.value=old;select.disabled=false;toast('Terminez ou récupérez la sauvegarde avant de changer d’hôtel','warning');return;}
+ try{cloudReady=false;db.hotelId=select.value;localStorage.setItem('soonre-hotel:'+db.currentUser.id,db.hotelId);await loadCloudState();showApp();}catch(error){db.hotelId=old;select.value=old;localStorage.setItem('soonre-hotel:'+db.currentUser.id,old);toast(error.message,'danger');}finally{select.disabled=false;}
  };
 }
 function openHotelModal(){
