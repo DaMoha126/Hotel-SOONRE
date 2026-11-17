@@ -50,9 +50,10 @@ async function remoteVersions(owner){
 function baselineFingerprint(){return JSON.stringify([...baselineVersions].map(([k,v])=>[k,Number(v)]).sort((a,b)=>a[0].localeCompare(b[0])));}
 function editing(){return document.getElementById('modalOverlay')?.classList.contains('active')||document.activeElement?.matches('input,textarea,select,[contenteditable="true"]')||window.SOONRE_HOUSEKEEPING?.isBusy()||window.SOONRE_BILLING?.isBusy?.();}
 async function refreshRemote(force=false){
- if(checking||!safe()||!navigator.onLine||(!force&&document.hidden))return false;
+ if(checking||!db.currentUser?.actif||recoveryBlocked||window.hotelSyncPending||!navigator.onLine||(!force&&document.hidden))return false;
  const owner=contextKey(),hotel=db.hotelId;checking=true;
  try{
+  if(!cloudReady){if(!force)return false;await loadCloudState({preserveLocalModules:false});if(same(owner)){const page=document.querySelector('.page.active')?.id?.replace('page-','');if(page)showPage(page);}return true;}
   const fingerprint=await remoteVersions(hotel);if(!same(owner)||!safe())return false;
   remoteChanged=fingerprint!==baselineFingerprint();refreshFailed=false;
   if((remoteChanged||force)&&!editing()){
