@@ -625,6 +625,7 @@ textarea.form-control{min-height:80px;resize:vertical}
 </style>
 <link rel="stylesheet" href="theme.css?v=22">
 <link rel="stylesheet" href="analyses.css?v=21">
+<link rel="stylesheet" href="messagerie.css?v=23">
 </head>
 <body>
 
@@ -668,6 +669,7 @@ textarea.form-control{min-height:80px;resize:vertical}
     <nav class="sidebar-nav">
       <div class="nav-section">Principal</div>
       <div class="nav-item active" data-page="dashboard"><span class="icon">📊</span>Tableau de bord</div>
+      <div class="nav-item" data-page="messagerie"><span class="icon">✉</span>Messagerie</div>
       <div class="nav-item" data-page="analyses"><span class="icon">↗</span>Analyses</div>
       <div class="nav-item" data-page="reservations"><span class="icon">📅</span>Réservations</div>
       <div class="nav-item" data-page="chambres"><span class="icon">🛏️</span>Chambres</div>
@@ -805,6 +807,19 @@ textarea.form-control{min-height:80px;resize:vertical}
         </div>
       </div>
 
+      <div class="page" id="page-messagerie">
+        <div class="chat-layout">
+          <section class="chat-panel" aria-label="Discussion de l’hôtel">
+            <header class="chat-head"><div><h2>Discussion de l’équipe</h2><p id="chatHotel"></p><p id="chatConnection" class="chat-status" role="status"></p></div><button class="btn btn-ghost" id="chatRefresh" type="button">Actualiser</button></header>
+            <div class="chat-history"><button class="btn btn-sm btn-ghost" id="chatPrevious" type="button">Messages précédents</button><button class="btn btn-sm btn-ghost" id="chatLatest" type="button" hidden>Derniers messages</button></div>
+            <div id="chatMessages" role="region" aria-label="Historique des messages" tabindex="0"></div>
+            <button class="btn btn-sm btn-ghost" id="chatNew" type="button" hidden>Voir les nouveaux messages ↓</button>
+            <p id="chatError" role="status" aria-live="polite"></p>
+            <form id="chatComposer" hidden><label for="chatText">Votre message à l’équipe</label><textarea id="chatText" maxlength="4000" rows="3" placeholder="Écrivez à vos collègues…" aria-describedby="chatComposeHelp chatCount"></textarea><div class="chat-compose-actions"><small id="chatComposeHelp">Entrée pour envoyer · Maj + Entrée pour une nouvelle ligne<br><span id="chatCount">0 / 4 000</span></small><button class="btn btn-primary" id="chatSend" type="submit">Envoyer</button></div></form>
+          </section>
+          <aside class="chat-members"><h3>Les membres de l’hôtel</h3><p id="chatMemberCount"></p><p>Une discussion partagée par les membres actifs de cet hôtel. Tous ces membres peuvent lire les messages.</p><details open><summary>Voir l’équipe</summary><ul id="chatMembers"></ul></details></aside>
+        </div>
+      </div>
       <div class="page" id="page-analyses">
         <div class="analysis-intro"><span class="soonre-eyebrow">PILOTAGE DE L’HÔTEL</span><h2>Vos chiffres, en perspective.</h2><p id="analysisHotel"></p><p id="analysisStatus"></p></div>
         <div class="filters analysis-filters"><div class="form-group"><label for="analysisFrom">Du</label><input type="date" class="form-control" id="analysisFrom"></div><div class="form-group"><label for="analysisTo">Au</label><input type="date" class="form-control" id="analysisTo"></div><button class="btn btn-primary" id="analysisApply" type="button">Analyser</button><button class="btn btn-ghost" id="analysisExport" type="button">Exporter en CSV</button></div>
@@ -2492,6 +2507,7 @@ textarea.form-control{min-height:80px;resize:vertical}
 <script src="workspace.js?v=20"></script>
 <script src="experience.js?v=22"></script>
 <script src="analyses.js?v=21"></script>
+<script src="messagerie.js?v=23"></script>
 
 </body>
 </html>
