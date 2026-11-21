@@ -1,0 +1,43 @@
+const fs=require('fs'),path=require('path'),assert=require('assert');const{JSDOM,ResourceLoader,VirtualConsole}=require('jsdom');
+const root=path.resolve(__dirname,'..');
+class Loader extends ResourceLoader{fetch(url){if(url.includes('chart'))return Promise.resolve(Buffer.from('window.Chart=class{constructor(ctx,config){this.data=config.data;this.update=()=>{};this.destroy=()=>{}}};'));if(url.includes('supabase.js'))return Promise.resolve(Buffer.from('window.supabase={createClient:()=>({auth:{getSession:async()=>({data:{session:null}}),signOut:async()=>({error:null})}})};'));if(url.startsWith('https://soonre.test/')){const file=path.join(root,new URL(url).pathname);return Promise.resolve(fs.readFileSync(file));}return Promise.resolve(Buffer.from(''));}}
+(async()=>{const errors=[];const vc=new VirtualConsole();vc.on('jsdomError',e=>errors.push(e.message));const dom=new JSDOM(fs.readFileSync(root+'/index.html','utf8'),{url:'https://soonre.test/index.html',runScripts:'dangerously',resources:new Loader(),pretendToBeVisual:true,virtualConsole:vc,beforeParse(w){w.structuredClone=structuredClone;w.confirm=()=>true;}});await new Promise(r=>dom.window.addEventListener('load',r));await new Promise(r=>setTimeout(r,300));assert.deepEqual(errors,[],'Startup errors');
+const results=await dom.window.eval(String.raw`(async()=>{
+ const checks=[];function check(value,name){if(!value)throw Error(name);checks.push(name);}const tick=()=>new Promise(r=>setTimeout(r,30));
+ let calls=[],history=[],memberRows=[{id:'staff',nom:'<img src=x onerror=alert(1)>',role:'Ménage'}],next=1,failSend=false,confirmFirst=false,deny=false,removed=0,eventHandler=null,late=null;
+ sb.channel=()=>({on(_type,config,fn){check(config.filter==='hotel_id=eq.'+db.hotelId,'Realtime subscribes to the selected hotel');eventHandler=fn;return this;},subscribe(fn){fn('SUBSCRIBED');return this;}});sb.removeChannel=async()=>{removed++;};
+ callServerRPC=async(name,args)=>{calls.push({name,args});if(late&&name==='lire_messages_hotel')return new Promise(resolve=>{late.resolve=resolve;});if(deny)return{error:{code:'42501'}};if(name==='membres_messagerie_hotel')return{data:memberRows};if(name==='lire_messages_hotel')return{data:history.filter(m=>!args.p_avant||BigInt(m.id)<BigInt(args.p_avant)).slice(-50)};if(name==='envoyer_message_hotel'){let m=history.find(m=>m.client_id===args.p_id);if(!m){m={id:String(next++),client_id:args.p_id,hotel_id:args.p_hotel,auteur_id:db.currentUser.id,auteur_nom:db.currentUser.nom,auteur_role:db.currentUser.role,texte:args.p_texte,created_at:'2026-11-21T12:00:00Z'};history.push(m);}if(failSend){if(confirmFirst){eventHandler();await tick();}return{error:{message:'Network lost'}};}return{data:m};}};
+ db.currentUser={id:'staff',nom:'Réception',role:'Accueil / Réception',actif:true};db.hotelId='hotel-one';db.config.nom='Hôtel un';localOwner=db.hotelId;cloudReady=true;
+ filtrerMenuParRole();showPage('messagerie');await tick();
+ check(document.getElementById('page-messagerie').classList.contains('active')&&!document.getElementById('chatComposer').hidden,'Reception opens the discussion');
+ check(document.getElementById('chatMessages').textContent.includes('premier message'),'Empty conversation has an honest prompt');
+ check(!document.getElementById('chatMembers').querySelector('img')&&document.getElementById('chatMembers').textContent.includes('<img'),'Member names render as inert text');
+ const input=document.getElementById('chatText'),submit=()=>document.getElementById('chatComposer').dispatchEvent(new Event('submit',{cancelable:true}));
+ input.value='Bonjour <img src=x onerror=alert(1)>';submit();await tick();
+ check(history.length===1&&input.value===''&&!input.readOnly,'Confirmed message clears composer');
+ check(!document.getElementById('chatMessages').querySelector('img')&&document.getElementById('chatMessages').textContent.includes('<img'),'Message HTML cannot execute');
+ check(document.querySelector('.chat-message.is-own'),'Own message is identified');
+ failSend=true;input.value='Message réseau';submit();await tick();
+ const firstRetry=calls.filter(c=>c.name==='envoyer_message_hotel').at(-1).args.p_id;
+ check(input.readOnly&&document.getElementById('chatError').textContent.includes('non confirmé'),'Uncertain send keeps its body and operation for safe retry');
+ failSend=false;submit();await tick();
+ check(calls.filter(c=>c.name==='envoyer_message_hotel').at(-1).args.p_id===firstRetry&&history.length===2,'Retry uses the same ID without duplicate message');
+ check(!Object.keys(sessionStorage).some(k=>k.startsWith('soonre-chat-pending:')),'Confirmed operation removes temporary recovery record');
+ failSend=true;confirmFirst=true;input.value='Confirmation par lecture';submit();await new Promise(r=>setTimeout(r,80));check(input.value===''&&!document.getElementById('chatError').textContent.includes('non confirmé'),'A confirmed realtime read wins over a lost send response');failSend=false;confirmFirst=false;
+ input.value='Clavier';input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',shiftKey:true,bubbles:true,cancelable:true}));await tick();check(history.length===3,'Shift Enter does not send');
+ input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',isComposing:true,bubbles:true,cancelable:true}));await tick();check(history.length===3,'IME composition does not send');
+ input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));await tick();check(history.length===4,'Enter sends once');
+ for(let i=0;i<80;i++)history.push({id:String(next++),client_id:'seed'+i,auteur_id:'other',auteur_nom:'Collègue',auteur_role:'Ménage',texte:'Historique '+i,created_at:'2026-11-21T12:00:00Z'});
+ eventHandler();await tick();check(document.querySelectorAll('.chat-message').length===50,'Long discussion keeps at most 50 messages in the DOM');
+ document.getElementById('chatPrevious').click();await tick();check(document.querySelectorAll('.chat-message').length===34&&!document.getElementById('chatLatest').hidden,'Earlier history uses bounded pagination');
+ document.getElementById('chatLatest').click();await tick();check(document.querySelectorAll('.chat-message').length===50,'Latest button returns to recent conversation');
+ for(const role of ['Ménage','Maintenance','Directeur Général','Gérant','Super Administrateur']){db.currentUser.role=role;filtrerMenuParRole();check(document.querySelector('[data-page="messagerie"]').style.display!=='none','Chat menu allowed for '+role);}
+ db.currentUser.role='Ménage';showPage('messagerie');await tick();check(!document.getElementById('chatComposer').hidden,'Cleaner can open chat despite room-only legacy navigation');
+ const nRemoved=removed;showPage('chambres');await tick();check(removed>nRemoved&&document.getElementById('chatMessages').children.length===0,'Leaving chat closes its channel and clears visible history');
+ db.currentUser.role='Gérant';showPage('messagerie');await tick();deny=true;document.getElementById('chatRefresh').click();await tick();check(document.getElementById('chatComposer').hidden&&document.getElementById('chatMessages').children.length===0&&document.getElementById('chatMembers').children.length===0,'Server revocation clears messages and colleague details');
+ deny=false;late={};showPage('messagerie');await tick();const deferred=late;late=null;db.hotelId='hotel-two';history=[];showPage('messagerie');await tick();deferred.resolve({data:[{id:'999',texte:'Ancien hôtel',auteur_nom:'Secret',created_at:'2026-11-21',auteur_id:'other'}]});await tick();check(!document.getElementById('chatMessages').textContent.includes('Secret'),'Late old-hotel response cannot leak into new conversation');
+ db.currentUser.actif=false;filtrerMenuParRole();check(document.querySelector('[data-page="messagerie"]').style.display==='none'&&document.getElementById('chatMessages').children.length===0,'Inactive account loses menu and in-memory history');
+ return checks;
+})()`);
+for(const name of results)console.log('PASS '+name);assert.deepEqual(errors,[],'Runtime errors');console.log('PASS '+results.length+' messaging frontend scenarios');dom.window.close();
+})().catch(e=>{console.error(e);process.exit(1);});
