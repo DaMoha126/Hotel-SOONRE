@@ -624,6 +624,7 @@ textarea.form-control{min-height:80px;resize:vertical}
 @media (prefers-reduced-motion:reduce){.login-logo .sun{animation:none}.nav-item:hover,.kpi:hover{transform:none}}
 </style>
 <link rel="stylesheet" href="theme.css?v=20">
+<link rel="stylesheet" href="analyses.css?v=21">
 </head>
 <body>
 
@@ -667,6 +668,7 @@ textarea.form-control{min-height:80px;resize:vertical}
     <nav class="sidebar-nav">
       <div class="nav-section">Principal</div>
       <div class="nav-item active" data-page="dashboard"><span class="icon">📊</span>Tableau de bord</div>
+      <div class="nav-item" data-page="analyses"><span class="icon">↗</span>Analyses</div>
       <div class="nav-item" data-page="reservations"><span class="icon">📅</span>Réservations</div>
       <div class="nav-item" data-page="chambres"><span class="icon">🛏️</span>Chambres</div>
       <div class="nav-item" data-page="clients"><span class="icon">👥</span>Clients</div>
@@ -800,6 +802,27 @@ textarea.form-control{min-height:80px;resize:vertical}
             <div class="card-header"><h3>Alerte & Notifications</h3></div>
             <div id="alertsList"></div>
           </div>
+        </div>
+      </div>
+
+      <div class="page" id="page-analyses">
+        <div class="analysis-intro"><span class="soonre-eyebrow">PILOTAGE DE L’HÔTEL</span><h2>Vos chiffres, en perspective.</h2><p id="analysisHotel"></p><p id="analysisStatus"></p></div>
+        <div class="filters analysis-filters"><div class="form-group"><label for="analysisFrom">Du</label><input type="date" class="form-control" id="analysisFrom"></div><div class="form-group"><label for="analysisTo">Au</label><input type="date" class="form-control" id="analysisTo"></div><button class="btn btn-primary" id="analysisApply" type="button">Analyser</button><button class="btn btn-ghost" id="analysisExport" type="button">Exporter en CSV</button></div>
+        <div class="analysis-presets"><button class="btn btn-sm btn-ghost" data-analysis-period="7d">7 jours</button><button class="btn btn-sm btn-ghost" data-analysis-period="30d">30 jours</button><button class="btn btn-sm btn-ghost" data-analysis-period="month">Ce mois</button><button class="btn btn-sm btn-ghost" data-analysis-period="year">Cette année</button></div>
+        <p id="analysisError" class="analysis-error" role="alert"></p>
+        <div id="analysisResults" hidden>
+          <div class="analysis-kpis">
+            <div class="kpi"><div class="label">Facturé sur la période</div><div class="value" id="analysisBilled"></div><div class="sub" id="analysisBilledSub"></div></div>
+            <div class="kpi"><div class="label">Entrées de caisse</div><div class="value" id="analysisIncoming"></div><div class="sub">Tous modes · date du mouvement</div></div>
+            <div class="kpi"><div class="label">Sorties de caisse</div><div class="value" id="analysisOutgoing"></div><div class="sub">Tous modes · date du mouvement</div></div>
+            <div class="kpi"><div class="label">Solde des mouvements</div><div class="value" id="analysisBalance"></div><div class="sub">Entrées − sorties · hors fonds initiaux</div></div>
+            <div class="kpi"><div class="label">Séjours débutant sur la période</div><div class="value" id="analysisStays"></div><div class="sub" id="analysisStaysSub"></div></div>
+            <div class="kpi"><div class="label">Impayés actuels</div><div class="value" id="analysisOutstanding"></div><div class="sub" id="analysisOutstandingSub"></div></div>
+          </div>
+          <p class="analysis-note" id="analysisComparison"></p>
+          <div class="analysis-charts"><div class="card"><div class="card-header"><h3>Entrées et sorties sur la période</h3></div><div class="analysis-chart"><canvas id="analysisCashChart" aria-label="Évolution des entrées et sorties" role="img"></canvas></div><p id="analysisCashEmpty" class="analysis-chart-empty"></p></div><div class="card"><div class="card-header"><h3>Modes d’encaissement</h3></div><div class="analysis-chart"><canvas id="analysisModeChart" aria-label="Répartition des entrées par mode de paiement" role="img"></canvas></div><p id="analysisModesEmpty" class="analysis-chart-empty"></p></div></div>
+          <div class="grid-2"><div class="card"><div class="card-header"><h3>Clients les plus facturés sur la période</h3></div><div class="table-wrap"><table><thead><tr><th>Client</th><th>Factures</th><th>Montant facturé</th></tr></thead><tbody id="analysisClients"></tbody></table></div></div><div class="card"><div class="card-header"><h3>Occupation actuelle</h3></div><div class="analysis-current"><strong id="analysisOccupancy"></strong><span id="analysisOccupancySub"></span></div><p class="analysis-note">Photographie des chambres actuellement occupées ; ce taux ne représente pas l’occupation historique de la période sélectionnée.</p></div></div>
+          <p class="analysis-note">Les montants facturés et les mouvements de caisse sont deux mesures distinctes. Ils ne sont pas additionnés. Le solde des mouvements n’est pas un bénéfice comptable. Les impayés et l’occupation reflètent la situation actuelle.</p>
         </div>
       </div>
 
@@ -2468,6 +2491,7 @@ textarea.form-control{min-height:80px;resize:vertical}
 <script src="theme.js"></script>
 <script src="workspace.js?v=20"></script>
 <script src="experience.js?v=20"></script>
+<script src="analyses.js?v=21"></script>
 
 </body>
 </html>
