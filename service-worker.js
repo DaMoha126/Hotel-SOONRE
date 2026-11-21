@@ -1,5 +1,5 @@
-const CACHE='hotel-soonre-responsive-v19';
-const ASSETS=['./index.html','./hotelsoonre.html','./app.js','./theme.css?v=19','./theme.js','./workspace.js?v=19','./experience.js?v=19','./assets/workspace-lobby.jpg','./reliability.js','./setup-accounts.js','./housekeeping.js','./stay-billing.js','./manifest.webmanifest','./icon.svg','./vendor/purify.min.js','./vendor/supabase.js','./vendor/chart.umd.min.js'];
+const CACHE='hotel-soonre-desktop-v20';
+const ASSETS=['./index.html','./hotelsoonre.html','./app.js','./theme.css?v=20','./theme.js','./workspace.js?v=20','./experience.js?v=20','./assets/workspace-lobby.jpg','./reliability.js','./setup-accounts.js','./housekeeping.js','./stay-billing.js','./manifest.webmanifest','./icon.svg','./vendor/purify.min.js','./vendor/supabase.js','./vendor/chart.umd.min.js'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key.startsWith('hotel-soonre-')&&key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim())));
 self.addEventListener('fetch',event=>{

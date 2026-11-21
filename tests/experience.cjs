@@ -5,6 +5,7 @@ class Loader extends ResourceLoader{fetch(url){if(url.includes('chart'))return P
 const results=await dom.window.eval(`(()=>{
  const checks=[];function check(value,name){if(!value)throw Error(name);checks.push(name);}
  db.currentUser={id:'experience-test',role:'Directeur Général',actif:true};db.hotelId='test';
+ const motion=document.getElementById('experienceMotion');check(motion&&!motion.checked,'Desktop transitions are off by default');motion.checked=true;motion.onchange();check(JSON.parse(localStorage.getItem('soonre-appearance-v1')).smoothMotion===true,'Optional transitions persist as a browser preference');SOONRE_EXPERIENCE.setTheme('iris');check(JSON.parse(localStorage.getItem('soonre-appearance-v1')).smoothMotion===true,'Changing color preserves the motion choice');motion.checked=false;motion.onchange();
  const before=JSON.stringify(exportSnapshot());SOONRE_EXPERIENCE.setTheme('sage');
  check(document.documentElement.dataset.workspaceTheme==='sage','Changes visual theme immediately');
  check(JSON.parse(localStorage.getItem('soonre-appearance-v1')).theme==='sage','Stores only browser appearance preference');
