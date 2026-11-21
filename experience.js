@@ -3,14 +3,14 @@
 'use strict';
 const reduced=()=>window.matchMedia?.('(prefers-reduced-motion: reduce)').matches===true;
 const lightweight=()=>!smoothMotion||reduced()||window.innerWidth<=900||(navigator.hardwareConcurrency>0&&navigator.hardwareConcurrency<=4);
-const styles={coral:{label:'Corail',rgb:'224 103 91',deep:'130 69 58',tint:'240 212 191'},sage:{label:'Sauge',rgb:'69 151 130',deep:'42 90 80',tint:'191 219 198'},iris:{label:'Iris',rgb:'130 112 189',deep:'73 63 110',tint:'211 205 232'},night:{label:'Nuit',rgb:'67 97 123',deep:'34 48 62',tint:'185 201 210'}};
-let theme='coral',smoothMotion=false,activeIndex=0,lastFocus=null;
-try{const saved=JSON.parse(localStorage.getItem('soonre-appearance-v1')||'null');if(saved&&Object.hasOwn(styles,saved.theme)){theme=saved.theme;smoothMotion=saved.smoothMotion===true;}}catch{}
+const styles={sky:{label:'Bleu clair',rgb:'91 169 223',deep:'40 102 150',tint:'207 233 251'},coral:{label:'Corail',rgb:'224 103 91',deep:'130 69 58',tint:'240 212 191'},sage:{label:'Sauge',rgb:'69 151 130',deep:'42 90 80',tint:'191 219 198'},iris:{label:'Iris',rgb:'130 112 189',deep:'73 63 110',tint:'211 205 232'},night:{label:'Nuit',rgb:'67 97 123',deep:'34 48 62',tint:'185 201 210'}};
+let theme='sky',smoothMotion=false,activeIndex=0,lastFocus=null;
+try{const saved=JSON.parse(localStorage.getItem('soonre-appearance-v1')||'null');if(saved){if(saved.paletteVersion===2&&Object.hasOwn(styles,saved.theme))theme=saved.theme;smoothMotion=saved.smoothMotion===true;}}catch{}
 function applyTheme(name,persist=true){
  if(!Object.hasOwn(styles,name))return;
  theme=name;const value=styles[name],root=document.documentElement;root.dataset.workspaceTheme=name;root.style.setProperty('--experience-accent',value.rgb);root.style.setProperty('--experience-deep',value.deep);root.style.setProperty('--experience-tint',value.tint);
  document.querySelectorAll('[data-experience-theme]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.experienceTheme===name)));
- if(persist)try{localStorage.setItem('soonre-appearance-v1',JSON.stringify({theme:name,smoothMotion}));}catch{toast('Préférence appliquée pour cette session uniquement','warning');}
+ if(persist)try{localStorage.setItem('soonre-appearance-v1',JSON.stringify({theme:name,smoothMotion,paletteVersion:2}));}catch{toast('Préférence appliquée pour cette session uniquement','warning');}
  if(window.Chart?.getChart){for(const canvas of document.querySelectorAll('canvas')){const chart=Chart.getChart(canvas);if(!chart?.data||chart.config.type!=='line'||!canvas.closest('.page')?.classList.contains('active'))continue;for(const dataset of chart.data.datasets)if(chart.config.type==='line'){dataset.borderColor='rgb('+value.rgb+')';dataset.backgroundColor='rgb('+value.rgb+' / .14)';dataset.pointBackgroundColor='rgb('+value.rgb+')';}chart.update(lightweight()?'none':undefined);}}
 }
 applyTheme(theme,false);
