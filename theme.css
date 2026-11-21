@@ -95,3 +95,4 @@ body::before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;ba
 .page.active{animation:none!important}
 @media(max-width:900px){.modal-overlay.active .modal{animation:none!important}.btn,.workspace-shortcut,.nav-item{transition:background-color .12s,color .12s}.workspace-shortcut:hover,.btn-primary:hover{transform:none}}
 }
+@media screen{.experience-motion-option{display:flex;align-items:center;gap:10px;margin:20px 0 10px;font-size:12px;cursor:pointer}.experience-motion-option input{width:17px;height:17px;accent-color:rgb(var(--experience-deep))}.kpi,.card,.panel,.btn-primary,.nav-item{transition-property:background-color,color,border-color!important}.kpi:hover,.card:hover,.panel:hover{transform:none!important}}

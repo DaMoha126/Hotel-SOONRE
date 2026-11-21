@@ -27,7 +27,7 @@ renderRevenueChart=function(){
  if(!revenueChart?.data||!revenueChart?.update){originalRevenue.apply(this,arguments);if(!revenueChart?.data||!revenueChart?.update)return;}
  const source=document.getElementById('chartSource')?.value||'all',now=new Date(),labels=[],values=[],count=range==='7d'?7:range==='6m'?6:12;
  for(let i=count-1;i>=0;i--){const start=range==='7d'?new Date(now.getFullYear(),now.getMonth(),now.getDate()-i):new Date(now.getFullYear(),now.getMonth()-i,1),end=new Date(start);if(range==='7d')end.setDate(end.getDate()+1);else end.setMonth(end.getMonth()+1);labels.push(start.toLocaleDateString('fr-FR',range==='7d'?{weekday:'short',day:'numeric'}:{month:'short'}));values.push(db.factures.filter(f=>new Date(f.date)>=start&&new Date(f.date)<end&&(source==='all'||f.type===source)).reduce((sum,f)=>sum+(Number(f.paye)||0),0));}
- revenueChart.data.labels=labels;revenueChart.data.datasets[0].data=values;revenueChart.update();
+ const unchanged=revenueChart.data.labels.length===labels.length&&revenueChart.data.labels.every((label,i)=>label===labels[i])&&revenueChart.data.datasets[0].data.length===values.length&&revenueChart.data.datasets[0].data.every((value,i)=>Number(value)===values[i]);if(!unchanged){revenueChart.data.labels=labels;revenueChart.data.datasets[0].data=values;revenueChart.update();}
 };
 function refreshWorkspace(){
  const now=new Date(),today=now.toISOString().slice(0,10),pending=db.reservations.filter(r=>r.arrivee===today&&r.statut==='confirmee'),departures=db.reservations.filter(r=>r.depart===today&&r.statut==='checkin');
