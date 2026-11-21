@@ -83,3 +83,15 @@ body{background:linear-gradient(105deg,rgb(var(--experience-deep) / .22),#e9d4b9
 @media(max-width:600px){.experience-search-button{gap:8px;font-size:9px;min-height:29px}.experience-search-button kbd{font-size:8px}.topbar-right{gap:7px}.experience-themes{grid-template-columns:repeat(2,minmax(0,1fr))}.workspace-hero h2{font-size:28px}.main{backdrop-filter:blur(18px)}.card,.kpi,.filters,.workspace-agenda,.workspace-shortcut{backdrop-filter:blur(18px)}}
 @media(prefers-reduced-motion:reduce){.workspace-orbit-bubble.key,.workspace-orbit-bubble.sun,.workspace-orbit-bubble.dot{animation:none}*{transition:none!important;scroll-behavior:auto!important}}
 }
+/* Low-cost glass: a single static decor layer, no live blur surfaces. */
+@media screen {
+body{position:relative;isolation:isolate;background:#dfd2c5}
+body::before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;background:linear-gradient(105deg,rgb(var(--experience-deep) / .22),#e9d4b930),url('assets/workspace-lobby.jpg') center/cover;transform:translateZ(0)}
+.app,.main,.sidebar,.topbar,.card,.kpi,.filters,.workspace-agenda,.workspace-shortcut,.modal-overlay,.modal,.login-card,.experience-command{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+.main{background:linear-gradient(155deg,#fff8e9dd,#fff6e7c9)}
+.card,.kpi,.filters,.workspace-agenda,.workspace-shortcut{background:linear-gradient(155deg,#fffdf5db,#fff9edbd)}
+.topbar{background:#faf1e3f0}.modal-overlay{background:#392a2459}.experience-command{background:#f7e8d8f5}.login-card{background:#fff8edeb}
+.workspace-orbit-bubble.key,.workspace-orbit-bubble.sun,.workspace-orbit-bubble.dot{animation:none!important}
+.page.active{animation:none!important}
+@media(max-width:900px){.modal-overlay.active .modal{animation:none!important}.btn,.workspace-shortcut,.nav-item{transition:background-color .12s,color .12s}.workspace-shortcut:hover,.btn-primary:hover{transform:none}}
+}

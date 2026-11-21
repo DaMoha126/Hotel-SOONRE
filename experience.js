@@ -2,6 +2,7 @@
 (function(){
 'use strict';
 const reduced=()=>window.matchMedia?.('(prefers-reduced-motion: reduce)').matches===true;
+const lightweight=()=>reduced()||window.innerWidth<=900||(navigator.hardwareConcurrency>0&&navigator.hardwareConcurrency<=4);
 const styles={coral:{label:'Corail',rgb:'224 103 91',deep:'130 69 58',tint:'240 212 191'},sage:{label:'Sauge',rgb:'69 151 130',deep:'42 90 80',tint:'191 219 198'},iris:{label:'Iris',rgb:'130 112 189',deep:'73 63 110',tint:'211 205 232'},night:{label:'Nuit',rgb:'67 97 123',deep:'34 48 62',tint:'185 201 210'}};
 let theme='coral',activeIndex=0,lastFocus=null;
 try{const saved=JSON.parse(localStorage.getItem('soonre-appearance-v1')||'null');if(saved&&Object.hasOwn(styles,saved.theme))theme=saved.theme;}catch{}
@@ -10,7 +11,7 @@ function applyTheme(name,persist=true){
  theme=name;const value=styles[name],root=document.documentElement;root.dataset.workspaceTheme=name;root.style.setProperty('--experience-accent',value.rgb);root.style.setProperty('--experience-deep',value.deep);root.style.setProperty('--experience-tint',value.tint);
  document.querySelectorAll('[data-experience-theme]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.experienceTheme===name)));
  if(persist)try{localStorage.setItem('soonre-appearance-v1',JSON.stringify({theme:name}));}catch{toast('Préférence appliquée pour cette session uniquement','warning');}
- if(window.Chart?.getChart){for(const canvas of document.querySelectorAll('canvas')){const chart=Chart.getChart(canvas);if(!chart?.data)continue;for(const dataset of chart.data.datasets)if(chart.config.type==='line'){dataset.borderColor='rgb('+value.rgb+')';dataset.backgroundColor='rgb('+value.rgb+' / .14)';dataset.pointBackgroundColor='rgb('+value.rgb+')';}chart.update(reduced()?'none':undefined);}}
+ if(window.Chart?.getChart){for(const canvas of document.querySelectorAll('canvas')){const chart=Chart.getChart(canvas);if(!chart?.data||chart.config.type!=='line'||!canvas.closest('.page')?.classList.contains('active'))continue;for(const dataset of chart.data.datasets)if(chart.config.type==='line'){dataset.borderColor='rgb('+value.rgb+')';dataset.backgroundColor='rgb('+value.rgb+' / .14)';dataset.pointBackgroundColor='rgb('+value.rgb+')';}chart.update(lightweight()?'none':undefined);}}
 }
 applyTheme(theme,false);
 function palette(){
@@ -36,11 +37,13 @@ const heading=document.createElement('h3');heading.textContent='Un espace à vot
 for(const [key,style] of Object.entries(styles)){const b=document.createElement('button');b.type='button';b.dataset.experienceTheme=key;b.style.setProperty('--swatch',style.rgb);b.setAttribute('aria-pressed',String(theme===key));const swatch=document.createElement('span');swatch.className='experience-swatch';swatch.setAttribute('aria-hidden','true');const name=document.createElement('strong');name.textContent=style.label;b.append(swatch,name);b.onclick=()=>applyTheme(key);choices.append(b);}
 const motionNote=document.createElement('p');motionNote.textContent='Les animations suivent automatiquement le réglage « Réduire les animations » de votre appareil.';panel.append(heading,help,choices,motionNote);document.getElementById('page-parametres').append(panel);
 const originalParam=switchParamTab;switchParamTab=function(name){const result=originalParam.apply(this,arguments);for(const area of document.querySelectorAll('#page-parametres>[id^="param-"]'))area.style.display=area.id==='param-'+name?'':'none';return result;};
-function cascade(name){if(reduced()||typeof Element.prototype.animate!=='function')return;const page=document.getElementById('page-'+name);if(!page?.classList.contains('active'))return;const nodes=[...page.querySelectorAll('.workspace-hero,.workspace-agenda,.kpi,.workspace-shortcut,.card,.filters')].filter(n=>n.getClientRects().length&&getComputedStyle(n).display!=='none').slice(0,24);for(const [i,node]of nodes.entries()){node.getAnimations?.().forEach(animation=>animation.cancel());node.animate([{opacity:0,transform:'translateY(14px) rotateX(3deg)',filter:'blur(5px)'},{opacity:1,transform:'none',filter:'blur(0)'}],{duration:560,delay:Math.min(i*38,230),easing:'cubic-bezier(.2,.7,.2,1)',fill:'backwards'});}}
+let lastAnimatedPage=null;
+function cascade(name){if(lastAnimatedPage===name)return;lastAnimatedPage=name;if(lightweight()||typeof Element.prototype.animate!=='function')return;const page=document.getElementById('page-'+name);if(!page?.classList.contains('active'))return;const nodes=[...page.children].filter(n=>n.style.display!=='none').slice(0,4);for(const [i,node]of nodes.entries())node.animate([{opacity:.75,transform:'translateY(4px)'},{opacity:1,transform:'none'}],{duration:160,delay:i*15,easing:'ease-out'});}
+
 const originalPage=showPage;showPage=function(name){const result=originalPage.apply(this,arguments);cascade(name);return result;};
 const originalApp=showApp;let openedFor=null;
-showApp=function(){const result=originalApp.apply(this,arguments);if(openedFor!==db.currentUser?.id&&!reduced()&&typeof Element.prototype.animate==='function'){openedFor=db.currentUser?.id;document.querySelector('#app .main')?.animate([{clipPath:'circle(12% at 50% 45%)',opacity:0,filter:'blur(14px)'},{clipPath:'circle(150% at 50% 45%)',opacity:1,filter:'blur(0)'}],{duration:1000,easing:'cubic-bezier(.16,1,.3,1)'});}return result;};
+showApp=function(){const result=originalApp.apply(this,arguments);if(openedFor!==db.currentUser?.id&&!lightweight()&&typeof Element.prototype.animate==='function'){openedFor=db.currentUser?.id;document.querySelector('#app .main')?.animate([{opacity:.65},{opacity:1}],{duration:180,easing:'ease-out'});}return result;};
 // Retain actual chart values; only the transition and accent follow appearance settings.
-if(window.Chart?.register)Chart.register({id:'soonreExperienceAccent',beforeUpdate(chart){if(chart.config.type==='line'){const rgb=styles[theme].rgb;for(const ds of chart.data.datasets){ds.borderColor='rgb('+rgb+')';ds.backgroundColor='rgb('+rgb+' / .14)';ds.pointBackgroundColor='rgb('+rgb+')';}}chart.options.animation=reduced()?false:{duration:650,easing:'easeInOutQuart'};}});
+if(window.Chart?.register)Chart.register({id:'soonreExperienceAccent',beforeUpdate(chart){if(chart.config.type==='line'){const rgb=styles[theme].rgb;for(const ds of chart.data.datasets){ds.borderColor='rgb('+rgb+')';ds.backgroundColor='rgb('+rgb+' / .14)';ds.pointBackgroundColor='rgb('+rgb+')';}}chart.options.animation=lightweight()?false:{duration:180,easing:'easeOutQuad'};}});
 window.SOONRE_EXPERIENCE={openSearch:palette,setTheme:name=>applyTheme(name),getTheme:()=>theme};
 })();
