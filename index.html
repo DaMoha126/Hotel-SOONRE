@@ -625,7 +625,7 @@ textarea.form-control{min-height:80px;resize:vertical}
 </style>
 <link rel="stylesheet" href="theme.css?v=22">
 <link rel="stylesheet" href="analyses.css?v=21">
-<link rel="stylesheet" href="messagerie.css?v=23">
+<link rel="stylesheet" href="messagerie.css?v=24">
 </head>
 <body>
 
@@ -649,6 +649,7 @@ textarea.form-control{min-height:80px;resize:vertical}
       </div>
       <button type="submit" class="btn btn-primary btn-lg">Se connecter</button>
     </form>
+    <button type="button" class="btn btn-ghost" onclick="openForgotPassword()">Mot de passe oublié ?</button>
     <div class="login-info">Connectez-vous avec le compte créé par votre administrateur.</div>
   </div>
 </div>
@@ -810,12 +811,12 @@ textarea.form-control{min-height:80px;resize:vertical}
       <div class="page" id="page-messagerie">
         <div class="chat-layout">
           <section class="chat-panel" aria-label="Discussion de l’hôtel">
-            <header class="chat-head"><div><h2>Discussion de l’équipe</h2><p id="chatHotel"></p><p id="chatConnection" class="chat-status" role="status"></p></div><button class="btn btn-ghost" id="chatRefresh" type="button">Actualiser</button></header>
+            <header class="chat-head"><div><h2>Discussion de l’équipe</h2><p id="chatHotel"></p><p id="chatConnection" class="chat-status" role="status"></p><button id="chatEnableAlerts" class="btn btn-sm btn-ghost" type="button">Activer les alertes</button><p id="chatAlertStatus" class="chat-status"></p></div><button class="btn btn-ghost" id="chatRefresh" type="button">Actualiser</button></header>
             <div class="chat-history"><button class="btn btn-sm btn-ghost" id="chatPrevious" type="button">Messages précédents</button><button class="btn btn-sm btn-ghost" id="chatLatest" type="button" hidden>Derniers messages</button></div>
             <div id="chatMessages" role="region" aria-label="Historique des messages" tabindex="0"></div>
             <button class="btn btn-sm btn-ghost" id="chatNew" type="button" hidden>Voir les nouveaux messages ↓</button>
             <p id="chatError" role="status" aria-live="polite"></p>
-            <form id="chatComposer" hidden><label for="chatText">Votre message à l’équipe</label><textarea id="chatText" maxlength="4000" rows="3" placeholder="Écrivez à vos collègues…" aria-describedby="chatComposeHelp chatCount"></textarea><div class="chat-compose-actions"><small id="chatComposeHelp">Entrée pour envoyer · Maj + Entrée pour une nouvelle ligne<br><span id="chatCount">0 / 4 000</span></small><button class="btn btn-primary" id="chatSend" type="submit">Envoyer</button></div></form>
+            <form id="chatComposer" hidden><label for="chatText">Votre message à l’équipe</label><textarea id="chatText" maxlength="4000" rows="3" placeholder="Écrivez à vos collègues…" aria-describedby="chatComposeHelp chatCount"></textarea><div class="chat-photo-tools"><label for="chatPhoto">Joindre une photo</label><input type="file" id="chatPhoto" accept="image/jpeg,image/png,image/webp"><span id="chatPhotoInfo" role="status"></span><button id="chatRemovePhoto" class="btn btn-sm btn-ghost" type="button" hidden>Retirer la photo</button></div><div class="chat-compose-actions"><small id="chatComposeHelp">Entrée pour envoyer · Maj + Entrée pour une nouvelle ligne<br><span id="chatCount">0 / 4 000</span></small><button class="btn btn-primary" id="chatSend" type="submit">Envoyer</button></div></form>
           </section>
           <aside class="chat-members"><h3>Les membres de l’hôtel</h3><p id="chatMemberCount"></p><p>Une discussion partagée par les membres actifs de cet hôtel. Tous ces membres peuvent lire les messages.</p><details open><summary>Voir l’équipe</summary><ul id="chatMembers"></ul></details></aside>
         </div>
@@ -2498,6 +2499,7 @@ textarea.form-control{min-height:80px;resize:vertical}
 
 <div class="toast-container" id="toastContainer" role="status" aria-live="polite" aria-atomic="false"></div>
 
+<script src="account-security.js?v=24"></script>
 <script src="app.js"></script>
 <script src="reliability.js"></script>
 <script src="setup-accounts.js"></script>
@@ -2507,7 +2509,8 @@ textarea.form-control{min-height:80px;resize:vertical}
 <script src="workspace.js?v=20"></script>
 <script src="experience.js?v=22"></script>
 <script src="analyses.js?v=21"></script>
-<script src="messagerie.js?v=23"></script>
+<script src="messagerie.js?v=24"></script>
+<script src="staff-alerts.js?v=24"></script>
 
 </body>
 </html>
