@@ -11,8 +11,8 @@
   'Directeur Général':'Configuration, comptes de niveau inférieur, finances et suivi de cet hôtel.',
   'Gérant':'Gestion opérationnelle, finances et comptes de réception, ménage et maintenance de cet hôtel.',
   'Accueil / Réception':'Clients, réservations, factures et encaissements autorisés ; aucun changement de rôle ou de tarif.',
-  'Ménage':'Suivi du nettoyage et de la propreté des chambres ; aucun encaissement ni changement de tarif.',
-  'Maintenance':'Suivi des indisponibilités des chambres ; aucun encaissement ni changement de tarif.'
+  'Ménage':'Suivi du nettoyage et de la propreté des chambres, messagerie de l’équipe ; aucun encaissement ni changement de tarif.',
+  'Maintenance':'Suivi des indisponibilités des chambres et messagerie de l’équipe ; aucun encaissement ni changement de tarif.'
  };
  function element(tag,className,value){
   const el=document.createElement(tag);if(className)el.className=className;if(value!==undefined)el.textContent=value;return el;
@@ -125,7 +125,7 @@
   }
   const recipe=element('section','card');recipe.style.padding='14px';recipe.append(element('h4','','Recette à réaliser avec les vrais comptes du personnel'));
   const hint=element('p','','Cochez uniquement après réalisation. Cette liste locale aide la formation ; elle ne certifie aucun test serveur et n’est pas cochée automatiquement.');hint.style.margin='8px 0';recipe.append(hint);
-  const checks=['Se connecter avec un compte de réception et vérifier ses droits.','Créer un séjour de test, enregistrer l’arrivée puis le départ.','Vérifier le passage de la chambre au ménage et son retour à l’état propre.','Facturer et tester les modes d’encaissement prévus sans utiliser de fonds réels.','Vérifier une sauvegarde et sa restauration sur une copie isolée.'];
+  const checks=['Envoyer un message et une photo entre deux comptes de l’hôtel, puis vérifier les messages non lus.','Vérifier l’adresse de récupération et configurer la double authentification si souhaité.','Se connecter avec un compte de réception et vérifier ses droits.','Créer un séjour de test, enregistrer l’arrivée puis le départ.','Vérifier le passage de la chambre au ménage et son retour à l’état propre.','Facturer et tester les modes d’encaissement prévus sans utiliser de fonds réels.','Vérifier une sauvegarde et sa restauration sur une copie isolée.'];
   checks.forEach((label,index)=>{const line=element('label');line.style.cssText='display:flex;align-items:flex-start;gap:10px;margin:10px 0';const box=element('input');box.type='checkbox';box.id='setupRecipeCheck'+index;line.htmlFor=box.id;line.append(box,document.createTextNode(label));recipe.append(line);});
   body.append(recipe);
   openModal('Installation de '+hotelName(),'','<button class="btn btn-ghost" onclick="closeModal()">Fermer</button>');

@@ -6043,6 +6043,7 @@ function exportAudit(){
       return;
     }
 
+    if(window.requireStaffSecondFactor&&!await requireStaffSecondFactor(sb)){await sb.auth.signOut();db.currentUser=null;db.hotelId=null;clearSensitiveState();return;}
     const ok = await chargerSessionUtilisateur(data.user.id, u);
     if(!ok){
       db.currentUser=null; db.hotelId=null;
@@ -6719,6 +6720,7 @@ async function demarrerApp(){
   if(sb){
     const { data:{ session } } = await sb.auth.getSession();
     if(session?.user){
+      if(window.requireStaffSecondFactor&&!await requireStaffSecondFactor(sb)){await sb.auth.signOut();db.currentUser=null;db.hotelId=null;clearSensitiveState();return;}
       const ok = await chargerSessionUtilisateur(session.user.id);
       if(ok){
         try { await chargerDonneesCoeur(); } catch(error) { await sb.auth.signOut(); db.currentUser=null; db.hotelId=null; toast(error.message,'danger'); document.getElementById('loginScreen').style.display='flex'; return; }
